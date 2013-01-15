@@ -10,6 +10,8 @@
  * optimizations.  Most users will not need to touch this file.
  */
 
+#ifndef JMORECFG_H
+#define JMORECFG_H
 
 /*
  * Define BITS_IN_JSAMPLE as either
@@ -20,8 +22,8 @@
  * We do not support run-time selection of data precision, sorry.
  */
 
-#define BITS_IN_JSAMPLE  8	/* use 8 or 12 */
-
+#define BITS_IN_JSAMPLE     8
+#define BITS_IN_JSAMPLE12  12
 
 /*
  * Maximum number of components (color channels) allowed in JPEG image.
@@ -43,51 +45,36 @@
  * but it had better be at least 16.
  */
 
+#if !defined HAVE_UNSIGNED_CHAR || !defined HAVE_UNSIGNED_SHORT
+# error "jmorecfg.h needs mods to support a lack of unsigned types"
+#endif
+
 /* Representation of a single sample (pixel element value).
  * We frequently allocate large arrays of these, so it's important to keep
  * them small.  But if you have memory to burn and access to char or short
  * arrays is very slow on your hardware, you might want to change these.
  */
 
-#if BITS_IN_JSAMPLE == 8
-/* JSAMPLE should be the smallest type that will hold the values 0..255.
+#define GETJSAMPLE(value)  ((int) (value))
+
+/* 8-bit
+ * JSAMPLE should be the smallest type that will hold the values 0..255.
  * You can use a signed char by having GETJSAMPLE mask it with 0xFF.
  */
-
-#ifdef HAVE_UNSIGNED_CHAR
-
 typedef unsigned char JSAMPLE;
-#define GETJSAMPLE(value)  ((int) (value))
-
-#else /* not HAVE_UNSIGNED_CHAR */
-
-typedef char JSAMPLE;
-#ifdef CHAR_IS_UNSIGNED
-#define GETJSAMPLE(value)  ((int) (value))
-#else
-#define GETJSAMPLE(value)  ((int) (value) & 0xFF)
-#endif /* CHAR_IS_UNSIGNED */
-
-#endif /* HAVE_UNSIGNED_CHAR */
 
 #define MAXJSAMPLE	255
 #define CENTERJSAMPLE	128
 
-#endif /* BITS_IN_JSAMPLE == 8 */
-
-
-#if BITS_IN_JSAMPLE == 12
-/* JSAMPLE should be the smallest type that will hold the values 0..4095.
- * On nearly all machines "short" will do nicely.
+/* 12-, 10-, and 14-, and 16-bit
+ * JSAMPLEXP should be the smallest type that will hold the values 0..4095
+ * (12-bit), 0..1023 (10-bit), 0..16383 (14-bit), 0..65535 (16-bit).
+ * On nearly all machines "unsigned short" will do nicely.
  */
+typedef unsigned short JSAMPLEXP;
 
-typedef short JSAMPLE;
-#define GETJSAMPLE(value)  ((int) (value))
-
-#define MAXJSAMPLE	4095
-#define CENTERJSAMPLE	2048
-
-#endif /* BITS_IN_JSAMPLE == 12 */
+#define MAXJSAMPLE12	4095
+#define CENTERJSAMPLE12	2048
 
 
 /* Representation of a DCT frequency coefficient.
@@ -233,6 +220,7 @@ typedef int boolean;
 #define TRUE	1
 #endif
 
+#endif /* JMORECFG_H */
 
 /*
  * The remaining options affect code selection within the JPEG library,

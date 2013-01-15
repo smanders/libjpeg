@@ -67,6 +67,10 @@ typedef JSAMPLE FAR *JSAMPROW;	/* ptr to one image row of pixel samples. */
 typedef JSAMPROW *JSAMPARRAY;	/* ptr to some rows (a 2-D sample array) */
 typedef JSAMPARRAY *JSAMPIMAGE;	/* a 3-D sample array: top index is color */
 
+typedef JSAMPLEXP FAR *JSAMPROWXP;	/* ptr to one image row of pixel samples. */
+typedef JSAMPROWXP *JSAMPARRAYXP;	/* ptr to some rows (a 2-D sample array) */
+typedef JSAMPARRAYXP *JSAMPIMAGEXP;	/* a 3-D sample array: top index is color */
+
 typedef JCOEF JBLOCK[DCTSIZE2];	/* one block of coefficients */
 typedef JBLOCK FAR *JBLOCKROW;	/* pointer to one row of coefficient blocks */
 typedef JBLOCKROW *JBLOCKARRAY;		/* a 2-D array of coefficient blocks */
@@ -762,6 +766,9 @@ struct jpeg_memory_mgr {
   JMETHOD(JSAMPARRAY, alloc_sarray, (j_common_ptr cinfo, int pool_id,
 				     JDIMENSION samplesperrow,
 				     JDIMENSION numrows));
+  JMETHOD(JSAMPARRAYXP, alloc_sarray_xp, (j_common_ptr cinfo, int pool_id,
+				     JDIMENSION samplesperrow,
+				     JDIMENSION numrows));
   JMETHOD(JBLOCKARRAY, alloc_barray, (j_common_ptr cinfo, int pool_id,
 				      JDIMENSION blocksperrow,
 				      JDIMENSION numrows));
@@ -778,7 +785,13 @@ struct jpeg_memory_mgr {
 						  JDIMENSION numrows,
 						  JDIMENSION maxaccess));
   JMETHOD(void, realize_virt_arrays, (j_common_ptr cinfo));
+  JMETHOD(void, realize_virt_arrays_xp, (j_common_ptr cinfo));
   JMETHOD(JSAMPARRAY, access_virt_sarray, (j_common_ptr cinfo,
+					   jvirt_sarray_ptr ptr,
+					   JDIMENSION start_row,
+					   JDIMENSION num_rows,
+					   boolean writable));
+  JMETHOD(JSAMPARRAYXP, access_virt_sarray_xp, (j_common_ptr cinfo,
 					   jvirt_sarray_ptr ptr,
 					   JDIMENSION start_row,
 					   JDIMENSION num_rows,
@@ -1089,7 +1102,9 @@ struct jpeg_color_quantizer { long dummy; };
  */
 
 #ifdef JPEG_INTERNALS
+#ifndef XJPEGLIB_H
 #include "jpegint.h"		/* fetch private declarations */
+#endif
 #include "jerror.h"		/* fetch error codes too */
 #endif
 

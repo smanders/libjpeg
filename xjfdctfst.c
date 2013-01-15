@@ -1,5 +1,5 @@
 /*
- * jfdctfst.c
+ * xjfdctfst.c
  *
  * Copyright (C) 1994-1996, Thomas G. Lane.
  * This file is part of the Independent JPEG Group's software.
@@ -32,8 +32,8 @@
 
 #define JPEG_INTERNALS
 #include "jinclude.h"
-#include "jpeglib.h"
-#include "jdct.h"		/* Private declarations for DCT subsystem */
+#include "xjpeglib.h"
+#include "xjdct.h"		/* Private declarations for DCT subsystem */
 
 #ifdef DCT_IFAST_SUPPORTED
 
@@ -111,7 +111,7 @@
  */
 
 GLOBAL(void)
-jpeg_fdct_ifast (DCTELEM * data)
+jpeg_fdct_ifast_xp (DCTELEM * data)
 {
   DCTELEM tmp0, tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7;
   DCTELEM tmp10, tmp11, tmp12, tmp13;

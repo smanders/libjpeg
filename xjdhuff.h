@@ -1,5 +1,5 @@
 /*
- * jdhuff.h
+ * xjdhuff.h
  *
  * Copyright (C) 1991-1997, Thomas G. Lane.
  * This file is part of the Independent JPEG Group's software.
@@ -13,7 +13,7 @@
 /* Short forms of external names for systems with brain-damaged linkers. */
 
 #ifdef NEED_SHORT_EXTERNAL_NAMES
-#define jpeg_make_d_derived_tbl	jMkDDerived
+#define jpeg_make_d_derived_tbl_xp	jMkDDerivedXp
 #define jpeg_fill_bit_buffer	jFilBitBuf
 #define jpeg_huff_decode	jHufDecode
 #endif /* NEED_SHORT_EXTERNAL_NAMES */
@@ -46,7 +46,7 @@ typedef struct {
 } d_derived_tbl;
 
 /* Expand a Huffman table definition into the derived format */
-EXTERN(void) jpeg_make_d_derived_tbl
+EXTERN(void) jpeg_make_d_derived_tbl_xp
 	JPP((j_decompress_ptr cinfo, boolean isDC, int tblno,
 	     d_derived_tbl ** pdtbl));
 
@@ -96,24 +96,24 @@ typedef struct {		/* Bitreading working state within an MCU */
   int bits_left;		/* # of unused bits in it */
   /* Pointer needed by jpeg_fill_bit_buffer. */
   j_decompress_ptr cinfo;	/* back link to decompress master record */
-} bitread_working_state;
+} bitread_working_state_xp;
 
 /* Macros to declare and load/save bitread local variables. */
 #define BITREAD_STATE_VARS  \
 	register bit_buf_type get_buffer;  \
 	register int bits_left;  \
-	bitread_working_state br_state
+	bitread_working_state_xp br_state
 
 #define BITREAD_LOAD_STATE(cinfop,permstate)  \
 	br_state.cinfo = cinfop; \
-	br_state.next_input_byte = cinfop->src->next_input_byte; \
-	br_state.bytes_in_buffer = cinfop->src->bytes_in_buffer; \
+	br_state.next_input_byte = ((j_decompress_ptr_xp) cinfop->client_data)->src_xp->next_input_byte; \
+	br_state.bytes_in_buffer = ((j_decompress_ptr_xp) cinfop->client_data)->src_xp->bytes_in_buffer; \
 	get_buffer = permstate.get_buffer; \
 	bits_left = permstate.bits_left;
 
 #define BITREAD_SAVE_STATE(cinfop,permstate)  \
-	cinfop->src->next_input_byte = br_state.next_input_byte; \
-	cinfop->src->bytes_in_buffer = br_state.bytes_in_buffer; \
+	((j_decompress_ptr_xp) cinfop->client_data)->src_xp->next_input_byte = br_state.next_input_byte; \
+	((j_decompress_ptr_xp) cinfop->client_data)->src_xp->bytes_in_buffer = br_state.bytes_in_buffer; \
 	permstate.get_buffer = get_buffer; \
 	permstate.bits_left = bits_left
 
@@ -137,7 +137,7 @@ typedef struct {		/* Bitreading working state within an MCU */
 
 #define CHECK_BIT_BUFFER(state,nbits,action) \
 	{ if (bits_left < (nbits)) {  \
-	    if (! jpeg_fill_bit_buffer(&(state),get_buffer,bits_left,nbits))  \
+	    if (! jpeg_fill_bit_buffer_xp(&(state),get_buffer,bits_left,nbits))  \
 	      { action; }  \
 	    get_buffer = (state).get_buffer; bits_left = (state).bits_left; } }
 
@@ -151,8 +151,8 @@ typedef struct {		/* Bitreading working state within an MCU */
 	(bits_left -= (nbits))
 
 /* Load up the bit buffer to a depth of at least nbits */
-EXTERN(boolean) jpeg_fill_bit_buffer
-	JPP((bitread_working_state * state, register bit_buf_type get_buffer,
+EXTERN(boolean) jpeg_fill_bit_buffer_xp
+	JPP((bitread_working_state_xp * state, register bit_buf_type get_buffer,
 	     register int bits_left, int nbits));
 
 
@@ -173,10 +173,10 @@ EXTERN(boolean) jpeg_fill_bit_buffer
  * 3. jpeg_huff_decode returns -1 if forced to suspend.
  */
 
-#define HUFF_DECODE(result,state,htbl,failaction,slowlabel) \
+#define HUFF_DECODE_XP(result,state,htbl,failaction,slowlabel) \
 { register int nb, look; \
   if (bits_left < HUFF_LOOKAHEAD) { \
-    if (! jpeg_fill_bit_buffer(&state,get_buffer,bits_left, 0)) {failaction;} \
+    if (! jpeg_fill_bit_buffer_xp(&state,get_buffer,bits_left, 0)) {failaction;} \
     get_buffer = state.get_buffer; bits_left = state.bits_left; \
     if (bits_left < HUFF_LOOKAHEAD) { \
       nb = 1; goto slowlabel; \
@@ -189,13 +189,13 @@ EXTERN(boolean) jpeg_fill_bit_buffer
   } else { \
     nb = HUFF_LOOKAHEAD+1; \
 slowlabel: \
-    if ((result=jpeg_huff_decode(&state,get_buffer,bits_left,htbl,nb)) < 0) \
+    if ((result=jpeg_huff_decode_xp(&state,get_buffer,bits_left,htbl,nb)) < 0) \
 	{ failaction; } \
     get_buffer = state.get_buffer; bits_left = state.bits_left; \
   } \
 }
 
 /* Out-of-line case for Huffman code fetching */
-EXTERN(int) jpeg_huff_decode
-	JPP((bitread_working_state * state, register bit_buf_type get_buffer,
+EXTERN(int) jpeg_huff_decode_xp
+	JPP((bitread_working_state_xp * state, register bit_buf_type get_buffer,
 	     register int bits_left, d_derived_tbl * htbl, int min_bits));

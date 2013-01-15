@@ -1,5 +1,5 @@
 /*
- * jdct.h
+ * xjdct.h
  *
  * Copyright (C) 1994-1996, Thomas G. Lane.
  * This file is part of the Independent JPEG Group's software.
@@ -26,7 +26,7 @@
  * Quantization of the output coefficients is done by jcdctmgr.c.
  */
 
-#if BITS_IN_JSAMPLE == 8
+#if BITS_IN_JSAMPLE12 == 8
 typedef int DCTELEM;		/* 16 or 32 bits is fine */
 #else
 typedef INT32 DCTELEM;		/* must have 32 bits */
@@ -54,7 +54,7 @@ typedef JMETHOD(void, float_DCT_method_ptr, (FAST_FLOAT * data));
  */
 
 typedef MULTIPLIER ISLOW_MULT_TYPE; /* short or int, whichever is faster */
-#if BITS_IN_JSAMPLE == 8
+#if BITS_IN_JSAMPLE12 == 8
 typedef MULTIPLIER IFAST_MULT_TYPE; /* 16 bits is OK, use short if faster */
 #define IFAST_SCALE_BITS  2	/* fractional bits in scale factors */
 #else
@@ -73,17 +73,17 @@ typedef FAST_FLOAT FLOAT_MULT_TYPE; /* preferred floating type */
  * prepare_range_limit_table (in jdmaster.c) for more info.
  */
 
-#define IDCT_range_limit(cinfo)  ((cinfo)->sample_range_limit + CENTERJSAMPLE)
+#define IDCT_range_limit(xinfo)  ((xinfo)->sample_range_limit_xp + CENTERJSAMPLE12)
 
-#define RANGE_MASK  (MAXJSAMPLE * 4 + 3) /* 2 bits wider than legal samples */
+#define RANGE_MASK  (MAXJSAMPLE12 * 4 + 3) /* 2 bits wider than legal samples */
 
 
 /* Short forms of external names for systems with brain-damaged linkers. */
 
 #ifdef NEED_SHORT_EXTERNAL_NAMES
-#define jpeg_fdct_islow		jFDislow
-#define jpeg_fdct_ifast		jFDifast
-#define jpeg_fdct_float		jFDfloat
+#define jpeg_fdct_islow_xp		jFDislowXp
+#define jpeg_fdct_ifast_xp		jFDifastXp
+#define jpeg_fdct_float_xp		jFDfloatXp
 #define jpeg_idct_islow		jRDislow
 #define jpeg_idct_ifast		jRDifast
 #define jpeg_idct_float		jRDfloat
@@ -94,28 +94,28 @@ typedef FAST_FLOAT FLOAT_MULT_TYPE; /* preferred floating type */
 
 /* Extern declarations for the forward and inverse DCT routines. */
 
-EXTERN(void) jpeg_fdct_islow JPP((DCTELEM * data));
-EXTERN(void) jpeg_fdct_ifast JPP((DCTELEM * data));
-EXTERN(void) jpeg_fdct_float JPP((FAST_FLOAT * data));
+EXTERN(void) jpeg_fdct_islow_xp JPP((DCTELEM * data));
+EXTERN(void) jpeg_fdct_ifast_xp JPP((DCTELEM * data));
+EXTERN(void) jpeg_fdct_float_xp JPP((FAST_FLOAT * data));
 
-EXTERN(void) jpeg_idct_islow
+EXTERN(void) jpeg_idct_islow_xp
     JPP((j_decompress_ptr cinfo, jpeg_component_info * compptr,
-	 JCOEFPTR coef_block, JSAMPARRAY output_buf, JDIMENSION output_col));
-EXTERN(void) jpeg_idct_ifast
+	 JCOEFPTR coef_block, JSAMPARRAYXP output_buf, JDIMENSION output_col));
+EXTERN(void) jpeg_idct_ifast_xp
     JPP((j_decompress_ptr cinfo, jpeg_component_info * compptr,
-	 JCOEFPTR coef_block, JSAMPARRAY output_buf, JDIMENSION output_col));
-EXTERN(void) jpeg_idct_float
+	 JCOEFPTR coef_block, JSAMPARRAYXP output_buf, JDIMENSION output_col));
+EXTERN(void) jpeg_idct_float_xp
     JPP((j_decompress_ptr cinfo, jpeg_component_info * compptr,
-	 JCOEFPTR coef_block, JSAMPARRAY output_buf, JDIMENSION output_col));
-EXTERN(void) jpeg_idct_4x4
+	 JCOEFPTR coef_block, JSAMPARRAYXP output_buf, JDIMENSION output_col));
+EXTERN(void) jpeg_idct_4x4_xp
     JPP((j_decompress_ptr cinfo, jpeg_component_info * compptr,
-	 JCOEFPTR coef_block, JSAMPARRAY output_buf, JDIMENSION output_col));
-EXTERN(void) jpeg_idct_2x2
+	 JCOEFPTR coef_block, JSAMPARRAYXP output_buf, JDIMENSION output_col));
+EXTERN(void) jpeg_idct_2x2_xp
     JPP((j_decompress_ptr cinfo, jpeg_component_info * compptr,
-	 JCOEFPTR coef_block, JSAMPARRAY output_buf, JDIMENSION output_col));
-EXTERN(void) jpeg_idct_1x1
+	 JCOEFPTR coef_block, JSAMPARRAYXP output_buf, JDIMENSION output_col));
+EXTERN(void) jpeg_idct_1x1_xp
     JPP((j_decompress_ptr cinfo, jpeg_component_info * compptr,
-	 JCOEFPTR coef_block, JSAMPARRAY output_buf, JDIMENSION output_col));
+	 JCOEFPTR coef_block, JSAMPARRAYXP output_buf, JDIMENSION output_col));
 
 
 /*

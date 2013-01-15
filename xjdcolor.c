@@ -1,5 +1,5 @@
 /*
- * jdcolor.c
+ * xjdcolor.c
  *
  * Copyright (C) 1991-1997, Thomas G. Lane.
  * This file is part of the Independent JPEG Group's software.
@@ -10,13 +10,13 @@
 
 #define JPEG_INTERNALS
 #include "jinclude.h"
-#include "jpeglib.h"
+#include "xjpeglib.h"
 
 
 /* Private subobject */
 
 typedef struct {
-  struct jpeg_color_deconverter pub; /* public fields */
+  struct jpeg_color_deconverter_xp pub; /* public fields */
 
   /* Private state for YCC->RGB conversion */
   int * Cr_r_tab;		/* => table for Cr to R conversion */
@@ -67,27 +67,30 @@ typedef my_color_deconverter * my_cconvert_ptr;
  */
 
 LOCAL(void)
-build_ycc_rgb_table (j_decompress_ptr cinfo)
+build_ycc_rgb_table_xp (j_decompress_ptr cinfo)
 {
-  my_cconvert_ptr cconvert = (my_cconvert_ptr) cinfo->cconvert;
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
+  my_cconvert_ptr cconvert = (my_cconvert_ptr) xinfo->cconvert_xp;
+  const JSAMPLEXP MAXJSAMPLEXP = xinfo->max_JSAMPLEXP;
+  const JSAMPLEXP CENTERJSAMPLEXP = xinfo->center_JSAMPLEXP;
   int i;
   INT32 x;
   SHIFT_TEMPS
 
   cconvert->Cr_r_tab = (int *)
     (*cinfo->mem->alloc_small) ((j_common_ptr) cinfo, JPOOL_IMAGE,
-				(MAXJSAMPLE+1) * SIZEOF(int));
+				(MAXJSAMPLEXP+1) * SIZEOF(int));
   cconvert->Cb_b_tab = (int *)
     (*cinfo->mem->alloc_small) ((j_common_ptr) cinfo, JPOOL_IMAGE,
-				(MAXJSAMPLE+1) * SIZEOF(int));
+				(MAXJSAMPLEXP+1) * SIZEOF(int));
   cconvert->Cr_g_tab = (INT32 *)
     (*cinfo->mem->alloc_small) ((j_common_ptr) cinfo, JPOOL_IMAGE,
-				(MAXJSAMPLE+1) * SIZEOF(INT32));
+				(MAXJSAMPLEXP+1) * SIZEOF(INT32));
   cconvert->Cb_g_tab = (INT32 *)
     (*cinfo->mem->alloc_small) ((j_common_ptr) cinfo, JPOOL_IMAGE,
-				(MAXJSAMPLE+1) * SIZEOF(INT32));
+				(MAXJSAMPLEXP+1) * SIZEOF(INT32));
 
-  for (i = 0, x = -CENTERJSAMPLE; i <= MAXJSAMPLE; i++, x++) {
+  for (i = 0, x = -CENTERJSAMPLEXP; i <= MAXJSAMPLEXP; i++, x++) {
     /* i is the actual input pixel value, in the range 0..MAXJSAMPLE */
     /* The Cb or Cr value we are thinking of is x = i - CENTERJSAMPLE */
     /* Cr=>R value is nearest int to 1.40200 * x */
@@ -117,18 +120,19 @@ build_ycc_rgb_table (j_decompress_ptr cinfo)
  */
 
 METHODDEF(void)
-ycc_rgb_convert (j_decompress_ptr cinfo,
-		 JSAMPIMAGE input_buf, JDIMENSION input_row,
-		 JSAMPARRAY output_buf, int num_rows)
+ycc_rgb_convert_xp (j_decompress_ptr cinfo,
+		 JSAMPIMAGEXP input_buf, JDIMENSION input_row,
+		 JSAMPARRAYXP output_buf, int num_rows)
 {
-  my_cconvert_ptr cconvert = (my_cconvert_ptr) cinfo->cconvert;
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
+  my_cconvert_ptr cconvert = (my_cconvert_ptr) xinfo->cconvert_xp;
   register int y, cb, cr;
-  register JSAMPROW outptr;
-  register JSAMPROW inptr0, inptr1, inptr2;
+  register JSAMPROWXP outptr;
+  register JSAMPROWXP inptr0, inptr1, inptr2;
   register JDIMENSION col;
   JDIMENSION num_cols = cinfo->output_width;
   /* copy these pointers into registers if possible */
-  register JSAMPLE * range_limit = cinfo->sample_range_limit;
+  register JSAMPLEXP * range_limit = xinfo->sample_range_limit_xp;
   register int * Crrtab = cconvert->Cr_r_tab;
   register int * Cbbtab = cconvert->Cb_b_tab;
   register INT32 * Crgtab = cconvert->Cr_g_tab;
@@ -166,11 +170,11 @@ ycc_rgb_convert (j_decompress_ptr cinfo,
  */
 
 METHODDEF(void)
-null_convert (j_decompress_ptr cinfo,
-	      JSAMPIMAGE input_buf, JDIMENSION input_row,
-	      JSAMPARRAY output_buf, int num_rows)
+null_convert_xp (j_decompress_ptr cinfo,
+	      JSAMPIMAGEXP input_buf, JDIMENSION input_row,
+	      JSAMPARRAYXP output_buf, int num_rows)
 {
-  register JSAMPROW inptr, outptr;
+  register JSAMPROWXP inptr, outptr;
   register JDIMENSION count;
   register int num_components = cinfo->num_components;
   JDIMENSION num_cols = cinfo->output_width;
@@ -198,11 +202,11 @@ null_convert (j_decompress_ptr cinfo,
  */
 
 METHODDEF(void)
-grayscale_convert (j_decompress_ptr cinfo,
-		   JSAMPIMAGE input_buf, JDIMENSION input_row,
-		   JSAMPARRAY output_buf, int num_rows)
+grayscale_convert_xp (j_decompress_ptr cinfo,
+		   JSAMPIMAGEXP input_buf, JDIMENSION input_row,
+		   JSAMPARRAYXP output_buf, int num_rows)
 {
-  jcopy_sample_rows(input_buf[0], (int) input_row, output_buf, 0,
+  jcopy_sample_rows_xp(input_buf[0], (int) input_row, output_buf, 0,
 		    num_rows, cinfo->output_width);
 }
 
@@ -214,11 +218,11 @@ grayscale_convert (j_decompress_ptr cinfo,
  */
 
 METHODDEF(void)
-gray_rgb_convert (j_decompress_ptr cinfo,
-		  JSAMPIMAGE input_buf, JDIMENSION input_row,
-		  JSAMPARRAY output_buf, int num_rows)
+gray_rgb_convert_xp (j_decompress_ptr cinfo,
+		  JSAMPIMAGEXP input_buf, JDIMENSION input_row,
+		  JSAMPARRAYXP output_buf, int num_rows)
 {
-  register JSAMPROW inptr, outptr;
+  register JSAMPROWXP inptr, outptr;
   register JDIMENSION col;
   JDIMENSION num_cols = cinfo->output_width;
 
@@ -242,18 +246,20 @@ gray_rgb_convert (j_decompress_ptr cinfo,
  */
 
 METHODDEF(void)
-ycck_cmyk_convert (j_decompress_ptr cinfo,
-		   JSAMPIMAGE input_buf, JDIMENSION input_row,
-		   JSAMPARRAY output_buf, int num_rows)
+ycck_cmyk_convert_xp (j_decompress_ptr cinfo,
+		   JSAMPIMAGEXP input_buf, JDIMENSION input_row,
+		   JSAMPARRAYXP output_buf, int num_rows)
 {
-  my_cconvert_ptr cconvert = (my_cconvert_ptr) cinfo->cconvert;
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
+  my_cconvert_ptr cconvert = (my_cconvert_ptr) xinfo->cconvert_xp;
+  const JSAMPLEXP MAXJSAMPLEXP = xinfo->max_JSAMPLEXP;
   register int y, cb, cr;
-  register JSAMPROW outptr;
-  register JSAMPROW inptr0, inptr1, inptr2, inptr3;
+  register JSAMPROWXP outptr;
+  register JSAMPROWXP inptr0, inptr1, inptr2, inptr3;
   register JDIMENSION col;
   JDIMENSION num_cols = cinfo->output_width;
   /* copy these pointers into registers if possible */
-  register JSAMPLE * range_limit = cinfo->sample_range_limit;
+  register JSAMPLEXP * range_limit = xinfo->sample_range_limit_xp;
   register int * Crrtab = cconvert->Cr_r_tab;
   register int * Cbbtab = cconvert->Cb_b_tab;
   register INT32 * Crgtab = cconvert->Cr_g_tab;
@@ -272,11 +278,11 @@ ycck_cmyk_convert (j_decompress_ptr cinfo,
       cb = GETJSAMPLE(inptr1[col]);
       cr = GETJSAMPLE(inptr2[col]);
       /* Range-limiting is essential due to noise introduced by DCT losses. */
-      outptr[0] = range_limit[MAXJSAMPLE - (y + Crrtab[cr])];	/* red */
-      outptr[1] = range_limit[MAXJSAMPLE - (y +			/* green */
+      outptr[0] = range_limit[MAXJSAMPLEXP - (y + Crrtab[cr])];	/* red */
+      outptr[1] = range_limit[MAXJSAMPLEXP - (y +			/* green */
 			      ((int) RIGHT_SHIFT(Cbgtab[cb] + Crgtab[cr],
 						 SCALEBITS)))];
-      outptr[2] = range_limit[MAXJSAMPLE - (y + Cbbtab[cb])];	/* blue */
+      outptr[2] = range_limit[MAXJSAMPLEXP - (y + Cbbtab[cb])];	/* blue */
       /* K passes through unchanged */
       outptr[3] = inptr3[col];	/* don't need GETJSAMPLE here */
       outptr += 4;
@@ -290,7 +296,7 @@ ycck_cmyk_convert (j_decompress_ptr cinfo,
  */
 
 METHODDEF(void)
-start_pass_dcolor (j_decompress_ptr cinfo)
+start_pass_dcolor_xp (j_decompress_ptr cinfo)
 {
   /* no work needed */
 }
@@ -301,16 +307,17 @@ start_pass_dcolor (j_decompress_ptr cinfo)
  */
 
 GLOBAL(void)
-jinit_color_deconverter (j_decompress_ptr cinfo)
+jinit_color_deconverter_xp (j_decompress_ptr cinfo)
 {
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
   my_cconvert_ptr cconvert;
   int ci;
 
   cconvert = (my_cconvert_ptr)
     (*cinfo->mem->alloc_small) ((j_common_ptr) cinfo, JPOOL_IMAGE,
 				SIZEOF(my_color_deconverter));
-  cinfo->cconvert = (struct jpeg_color_deconverter *) cconvert;
-  cconvert->pub.start_pass = start_pass_dcolor;
+  xinfo->cconvert_xp = (struct jpeg_color_deconverter_xp *) cconvert;
+  cconvert->pub.start_pass_xp = start_pass_dcolor_xp;
 
   /* Make sure num_components agrees with jpeg_color_space */
   switch (cinfo->jpeg_color_space) {
@@ -347,7 +354,7 @@ jinit_color_deconverter (j_decompress_ptr cinfo)
     cinfo->out_color_components = 1;
     if (cinfo->jpeg_color_space == JCS_GRAYSCALE ||
 	cinfo->jpeg_color_space == JCS_YCbCr) {
-      cconvert->pub.color_convert = grayscale_convert;
+      cconvert->pub.color_convert_xp = grayscale_convert_xp;
       /* For color->grayscale conversion, only the Y (0) component is needed */
       for (ci = 1; ci < cinfo->num_components; ci++)
 	cinfo->comp_info[ci].component_needed = FALSE;
@@ -358,12 +365,12 @@ jinit_color_deconverter (j_decompress_ptr cinfo)
   case JCS_RGB:
     cinfo->out_color_components = RGB_PIXELSIZE;
     if (cinfo->jpeg_color_space == JCS_YCbCr) {
-      cconvert->pub.color_convert = ycc_rgb_convert;
-      build_ycc_rgb_table(cinfo);
+      cconvert->pub.color_convert_xp = ycc_rgb_convert_xp;
+      build_ycc_rgb_table_xp(cinfo);
     } else if (cinfo->jpeg_color_space == JCS_GRAYSCALE) {
-      cconvert->pub.color_convert = gray_rgb_convert;
+      cconvert->pub.color_convert_xp = gray_rgb_convert_xp;
     } else if (cinfo->jpeg_color_space == JCS_RGB && RGB_PIXELSIZE == 3) {
-      cconvert->pub.color_convert = null_convert;
+      cconvert->pub.color_convert_xp = null_convert_xp;
     } else
       ERREXIT(cinfo, JERR_CONVERSION_NOTIMPL);
     break;
@@ -371,10 +378,10 @@ jinit_color_deconverter (j_decompress_ptr cinfo)
   case JCS_CMYK:
     cinfo->out_color_components = 4;
     if (cinfo->jpeg_color_space == JCS_YCCK) {
-      cconvert->pub.color_convert = ycck_cmyk_convert;
-      build_ycc_rgb_table(cinfo);
+      cconvert->pub.color_convert_xp = ycck_cmyk_convert_xp;
+      build_ycc_rgb_table_xp(cinfo);
     } else if (cinfo->jpeg_color_space == JCS_CMYK) {
-      cconvert->pub.color_convert = null_convert;
+      cconvert->pub.color_convert_xp = null_convert_xp;
     } else
       ERREXIT(cinfo, JERR_CONVERSION_NOTIMPL);
     break;
@@ -383,7 +390,7 @@ jinit_color_deconverter (j_decompress_ptr cinfo)
     /* Permit null conversion to same output space */
     if (cinfo->out_color_space == cinfo->jpeg_color_space) {
       cinfo->out_color_components = cinfo->num_components;
-      cconvert->pub.color_convert = null_convert;
+      cconvert->pub.color_convert_xp = null_convert_xp;
     } else			/* unsupported non-null conversion */
       ERREXIT(cinfo, JERR_CONVERSION_NOTIMPL);
     break;

@@ -1,5 +1,5 @@
 /*
- * jdtrans.c
+ * xjdtrans.c
  *
  * Copyright (C) 1995-1997, Thomas G. Lane.
  * This file is part of the Independent JPEG Group's software.
@@ -12,11 +12,12 @@
 
 #define JPEG_INTERNALS
 #include "jinclude.h"
-#include "jpeglib.h"
+#include "xjpeglib.h"
+#include "xjerror.h"
 
 
 /* Forward declarations */
-LOCAL(void) transdecode_master_selection JPP((j_decompress_ptr cinfo));
+LOCAL(void) transdecode_master_selection_xp JPP((j_decompress_ptr cinfo));
 
 
 /*
@@ -42,11 +43,12 @@ LOCAL(void) transdecode_master_selection JPP((j_decompress_ptr cinfo));
  */
 
 GLOBAL(jvirt_barray_ptr *)
-jpeg_read_coefficients (j_decompress_ptr cinfo)
+jpeg_read_coefficients_xp (j_decompress_ptr cinfo)
 {
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
   if (cinfo->global_state == DSTATE_READY) {
     /* First call: initialize active modules */
-    transdecode_master_selection(cinfo);
+    transdecode_master_selection_xp(cinfo);
     cinfo->global_state = DSTATE_RDCOEFS;
   }
   if (cinfo->global_state == DSTATE_RDCOEFS) {
@@ -57,7 +59,7 @@ jpeg_read_coefficients (j_decompress_ptr cinfo)
       if (cinfo->progress != NULL)
 	(*cinfo->progress->progress_monitor) ((j_common_ptr) cinfo);
       /* Absorb some more input */
-      retcode = (*cinfo->inputctl->consume_input) (cinfo);
+      retcode = (*xinfo->inputctl_xp->consume_input_xp) (cinfo);
       if (retcode == JPEG_SUSPENDED)
 	return NULL;
       if (retcode == JPEG_REACHED_EOI)
@@ -80,7 +82,7 @@ jpeg_read_coefficients (j_decompress_ptr cinfo)
    */
   if ((cinfo->global_state == DSTATE_STOPPING ||
        cinfo->global_state == DSTATE_BUFIMAGE) && cinfo->buffered_image) {
-    return cinfo->coef->coef_arrays;
+    return xinfo->coef_xp->coef_arrays;
   }
   /* Oops, improper usage */
   ERREXIT1(cinfo, JERR_BAD_STATE, cinfo->global_state);
@@ -94,8 +96,9 @@ jpeg_read_coefficients (j_decompress_ptr cinfo)
  */
 
 LOCAL(void)
-transdecode_master_selection (j_decompress_ptr cinfo)
+transdecode_master_selection_xp (j_decompress_ptr cinfo)
 {
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
   /* This is effectively a buffered-image operation. */
   cinfo->buffered_image = TRUE;
 
@@ -105,22 +108,22 @@ transdecode_master_selection (j_decompress_ptr cinfo)
   } else {
     if (cinfo->progressive_mode) {
 #ifdef D_PROGRESSIVE_SUPPORTED
-      jinit_phuff_decoder(cinfo);
+      jinit_phuff_decoder_xp(cinfo);
 #else
       ERREXIT(cinfo, JERR_NOT_COMPILED);
 #endif
     } else
-      jinit_huff_decoder(cinfo);
+      jinit_huff_decoder_xp(cinfo);
   }
 
   /* Always get a full-image coefficient buffer. */
-  jinit_d_coef_controller(cinfo, TRUE);
+  jinit_d_coef_controller_xp(cinfo, TRUE);
 
   /* We can now tell the memory manager to allocate virtual arrays. */
-  (*cinfo->mem->realize_virt_arrays) ((j_common_ptr) cinfo);
+  (*cinfo->mem->realize_virt_arrays_xp) ((j_common_ptr) cinfo);
 
   /* Initialize input side of decompressor to consume first scan. */
-  (*cinfo->inputctl->start_input_pass) (cinfo);
+  (*xinfo->inputctl_xp->start_input_pass_xp) (cinfo);
 
   /* Initialize progress monitoring. */
   if (cinfo->progress != NULL) {
@@ -129,7 +132,7 @@ transdecode_master_selection (j_decompress_ptr cinfo)
     if (cinfo->progressive_mode) {
       /* Arbitrarily estimate 2 interleaved DC scans + 3 AC scans/component. */
       nscans = 2 + 3 * cinfo->num_components;
-    } else if (cinfo->inputctl->has_multiple_scans) {
+    } else if (xinfo->inputctl_xp->has_multiple_scans) {
       /* For a nonprogressive multiscan file, estimate 1 scan per component. */
       nscans = cinfo->num_components;
     } else {

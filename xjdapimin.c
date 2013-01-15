@@ -1,5 +1,5 @@
 /*
- * jdapimin.c
+ * xjdapimin.c
  *
  * Copyright (C) 1994-1998, Thomas G. Lane.
  * This file is part of the Independent JPEG Group's software.
@@ -18,7 +18,8 @@
 
 #define JPEG_INTERNALS
 #include "jinclude.h"
-#include "jpeglib.h"
+#include "xjpeglib.h"
+#include "xjerror.h"
 
 
 /*
@@ -27,9 +28,10 @@
  */
 
 GLOBAL(void)
-jpeg_CreateDecompress (j_decompress_ptr cinfo, int version, size_t structsize)
+jpeg_CreateDecompress_xp (j_decompress_ptr cinfo, int version, size_t structsize)
 {
   int i;
+  j_decompress_ptr_xp xinfo;
 
   /* Guard against version mismatches between library and caller. */
   cinfo->mem = NULL;		/* so jpeg_destroy knows mem mgr not called */
@@ -55,11 +57,16 @@ jpeg_CreateDecompress (j_decompress_ptr cinfo, int version, size_t structsize)
   cinfo->is_decompressor = TRUE;
 
   /* Initialize a memory manager instance for this object */
-  jinit_memory_mgr((j_common_ptr) cinfo);
+  jinit_memory_mgr_xp((j_common_ptr) cinfo);
+
+  xinfo = (j_decompress_ptr_xp)
+    (*cinfo->mem->alloc_small) ((j_common_ptr) cinfo, JPOOL_PERMANENT,
+        SIZEOF(jpeg_decompress_struct_xp));
+  cinfo->client_data = (void*) xinfo;
 
   /* Zero out pointers to permanent structures. */
   cinfo->progress = NULL;
-  cinfo->src = NULL;
+  xinfo->src_xp = NULL;
 
   for (i = 0; i < NUM_QUANT_TBLS; i++)
     cinfo->quant_tbl_ptrs[i] = NULL;
@@ -73,10 +80,10 @@ jpeg_CreateDecompress (j_decompress_ptr cinfo, int version, size_t structsize)
    * for COM, APPn markers before calling jpeg_read_header.
    */
   cinfo->marker_list = NULL;
-  jinit_marker_reader(cinfo);
+  jinit_marker_reader_xp(cinfo);
 
   /* And initialize the overall input controller. */
-  jinit_input_controller(cinfo);
+  jinit_input_controller_xp(cinfo);
 
   /* OK, I'm ready */
   cinfo->global_state = DSTATE_START;
@@ -88,9 +95,9 @@ jpeg_CreateDecompress (j_decompress_ptr cinfo, int version, size_t structsize)
  */
 
 GLOBAL(void)
-jpeg_destroy_decompress (j_decompress_ptr cinfo)
+jpeg_destroy_decompress_xp (j_decompress_ptr cinfo)
 {
-  jpeg_destroy((j_common_ptr) cinfo); /* use common routine */
+  jpeg_destroy_xp((j_common_ptr) cinfo); /* use common routine */
 }
 
 
@@ -100,9 +107,9 @@ jpeg_destroy_decompress (j_decompress_ptr cinfo)
  */
 
 GLOBAL(void)
-jpeg_abort_decompress (j_decompress_ptr cinfo)
+jpeg_abort_decompress_xp (j_decompress_ptr cinfo)
 {
-  jpeg_abort((j_common_ptr) cinfo); /* use common routine */
+  jpeg_abort_xp((j_common_ptr) cinfo); /* use common routine */
 }
 
 
@@ -111,8 +118,9 @@ jpeg_abort_decompress (j_decompress_ptr cinfo)
  */
 
 LOCAL(void)
-default_decompress_parms (j_decompress_ptr cinfo)
+default_decompress_parms_xp (j_decompress_ptr cinfo)
 {
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
   /* Guess the input colorspace, and set output colorspace accordingly. */
   /* (Wish JPEG committee had provided a real way to specify this...) */
   /* Note application may override our guesses. */
@@ -202,7 +210,7 @@ default_decompress_parms (j_decompress_ptr cinfo)
   cinfo->two_pass_quantize = FALSE;
 #endif
   cinfo->desired_number_of_colors = 256;
-  cinfo->colormap = NULL;
+  xinfo->colormap_xp = NULL;
   /* Initialize for no mode change in buffered-image mode. */
   cinfo->enable_1pass_quant = FALSE;
   cinfo->enable_external_quant = FALSE;
@@ -238,7 +246,7 @@ default_decompress_parms (j_decompress_ptr cinfo)
  */
 
 GLOBAL(int)
-jpeg_read_header (j_decompress_ptr cinfo, boolean require_image)
+jpeg_read_header_xp (j_decompress_ptr cinfo, boolean require_image)
 {
   int retcode;
 
@@ -246,7 +254,7 @@ jpeg_read_header (j_decompress_ptr cinfo, boolean require_image)
       cinfo->global_state != DSTATE_INHEADER)
     ERREXIT1(cinfo, JERR_BAD_STATE, cinfo->global_state);
 
-  retcode = jpeg_consume_input(cinfo);
+  retcode = jpeg_consume_input_xp(cinfo);
 
   switch (retcode) {
   case JPEG_REACHED_SOS:
@@ -259,7 +267,7 @@ jpeg_read_header (j_decompress_ptr cinfo, boolean require_image)
      * call jpeg_abort, but we can't change it now for compatibility reasons.
      * A side effect is to free any temporary memory (there shouldn't be any).
      */
-    jpeg_abort((j_common_ptr) cinfo); /* sets state = DSTATE_START */
+    jpeg_abort_xp((j_common_ptr) cinfo); /* sets state = DSTATE_START */
     retcode = JPEG_HEADER_TABLES_ONLY;
     break;
   case JPEG_SUSPENDED:
@@ -284,24 +292,25 @@ jpeg_read_header (j_decompress_ptr cinfo, boolean require_image)
  */
 
 GLOBAL(int)
-jpeg_consume_input (j_decompress_ptr cinfo)
+jpeg_consume_input_xp (j_decompress_ptr cinfo)
 {
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
   int retcode = JPEG_SUSPENDED;
 
   /* NB: every possible DSTATE value should be listed in this switch */
   switch (cinfo->global_state) {
   case DSTATE_START:
     /* Start-of-datastream actions: reset appropriate modules */
-    (*cinfo->inputctl->reset_input_controller) (cinfo);
+    (*xinfo->inputctl_xp->reset_input_controller_xp) (cinfo);
     /* Initialize application's data source module */
-    (*cinfo->src->init_source) (cinfo);
+    (*xinfo->src_xp->init_source) (cinfo);
     cinfo->global_state = DSTATE_INHEADER;
     /*FALLTHROUGH*/
   case DSTATE_INHEADER:
-    retcode = (*cinfo->inputctl->consume_input) (cinfo);
+    retcode = (*xinfo->inputctl_xp->consume_input_xp) (cinfo);
     if (retcode == JPEG_REACHED_SOS) { /* Found SOS, prepare to decompress */
       /* Set up default parameters based on header data */
-      default_decompress_parms(cinfo);
+      default_decompress_parms_xp(cinfo);
       /* Set global state: ready for start_decompress */
       cinfo->global_state = DSTATE_READY;
     }
@@ -317,7 +326,7 @@ jpeg_consume_input (j_decompress_ptr cinfo)
   case DSTATE_BUFIMAGE:
   case DSTATE_BUFPOST:
   case DSTATE_STOPPING:
-    retcode = (*cinfo->inputctl->consume_input) (cinfo);
+    retcode = (*xinfo->inputctl_xp->consume_input_xp) (cinfo);
     break;
   default:
     ERREXIT1(cinfo, JERR_BAD_STATE, cinfo->global_state);
@@ -331,13 +340,14 @@ jpeg_consume_input (j_decompress_ptr cinfo)
  */
 
 GLOBAL(boolean)
-jpeg_input_complete (j_decompress_ptr cinfo)
+jpeg_input_complete_xp (j_decompress_ptr cinfo)
 {
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
   /* Check for valid jpeg object */
   if (cinfo->global_state < DSTATE_START ||
       cinfo->global_state > DSTATE_STOPPING)
     ERREXIT1(cinfo, JERR_BAD_STATE, cinfo->global_state);
-  return cinfo->inputctl->eoi_reached;
+  return xinfo->inputctl_xp->eoi_reached;
 }
 
 
@@ -346,13 +356,14 @@ jpeg_input_complete (j_decompress_ptr cinfo)
  */
 
 GLOBAL(boolean)
-jpeg_has_multiple_scans (j_decompress_ptr cinfo)
+jpeg_has_multiple_scans_xp (j_decompress_ptr cinfo)
 {
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
   /* Only valid after jpeg_read_header completes */
   if (cinfo->global_state < DSTATE_READY ||
       cinfo->global_state > DSTATE_STOPPING)
     ERREXIT1(cinfo, JERR_BAD_STATE, cinfo->global_state);
-  return cinfo->inputctl->has_multiple_scans;
+  return xinfo->inputctl_xp->has_multiple_scans;
 }
 
 
@@ -366,14 +377,15 @@ jpeg_has_multiple_scans (j_decompress_ptr cinfo)
  */
 
 GLOBAL(boolean)
-jpeg_finish_decompress (j_decompress_ptr cinfo)
+jpeg_finish_decompress_xp (j_decompress_ptr cinfo)
 {
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
   if ((cinfo->global_state == DSTATE_SCANNING ||
        cinfo->global_state == DSTATE_RAW_OK) && ! cinfo->buffered_image) {
     /* Terminate final pass of non-buffered mode */
     if (cinfo->output_scanline < cinfo->output_height)
       ERREXIT(cinfo, JERR_TOO_LITTLE_DATA);
-    (*cinfo->master->finish_output_pass) (cinfo);
+    (*xinfo->master_xp->finish_output_pass_xp) (cinfo);
     cinfo->global_state = DSTATE_STOPPING;
   } else if (cinfo->global_state == DSTATE_BUFIMAGE) {
     /* Finishing after a buffered-image operation */
@@ -383,13 +395,13 @@ jpeg_finish_decompress (j_decompress_ptr cinfo)
     ERREXIT1(cinfo, JERR_BAD_STATE, cinfo->global_state);
   }
   /* Read until EOI */
-  while (! cinfo->inputctl->eoi_reached) {
-    if ((*cinfo->inputctl->consume_input) (cinfo) == JPEG_SUSPENDED)
+  while (! xinfo->inputctl_xp->eoi_reached) {
+    if ((*xinfo->inputctl_xp->consume_input_xp) (cinfo) == JPEG_SUSPENDED)
       return FALSE;		/* Suspend, come back later */
   }
   /* Do final cleanup */
-  (*cinfo->src->term_source) (cinfo);
+  (*xinfo->src_xp->term_source) (cinfo);
   /* We can use jpeg_abort to release memory and reset global_state */
-  jpeg_abort((j_common_ptr) cinfo);
+  jpeg_abort_xp((j_common_ptr) cinfo);
   return TRUE;
 }

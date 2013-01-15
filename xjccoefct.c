@@ -1,5 +1,5 @@
 /*
- * jccoefct.c
+ * xjccoefct.c
  *
  * Copyright (C) 1994-1997, Thomas G. Lane.
  * This file is part of the Independent JPEG Group's software.
@@ -12,7 +12,7 @@
 
 #define JPEG_INTERNALS
 #include "jinclude.h"
-#include "jpeglib.h"
+#include "xjpeglib.h"
 
 
 /* We use a full-image coefficient buffer when doing Huffman optimization,
@@ -32,7 +32,7 @@
 /* Private buffer controller object */
 
 typedef struct {
-  struct jpeg_c_coef_controller pub; /* public fields */
+  struct jpeg_c_coef_controller_xp pub; /* public fields */
 
   JDIMENSION iMCU_row_num;	/* iMCU row # within image */
   JDIMENSION mcu_ctr;		/* counts MCUs processed in current row */
@@ -52,27 +52,28 @@ typedef struct {
 
   /* In multi-pass modes, we need a virtual block array for each component. */
   jvirt_barray_ptr whole_image[MAX_COMPONENTS];
-} my_coef_controller;
+} my_coef_controller_xp;
 
-typedef my_coef_controller * my_coef_ptr;
+typedef my_coef_controller_xp * my_coef_ptr;
 
 
 /* Forward declarations */
-METHODDEF(boolean) compress_data
-    JPP((j_compress_ptr cinfo, JSAMPIMAGE input_buf));
+METHODDEF(boolean) compress_data_xp
+    JPP((j_compress_ptr cinfo, JSAMPIMAGEXP input_buf));
 #ifdef FULL_COEF_BUFFER_SUPPORTED
-METHODDEF(boolean) compress_first_pass
-    JPP((j_compress_ptr cinfo, JSAMPIMAGE input_buf));
-METHODDEF(boolean) compress_output
-    JPP((j_compress_ptr cinfo, JSAMPIMAGE input_buf));
+METHODDEF(boolean) compress_first_pass_xp
+    JPP((j_compress_ptr cinfo, JSAMPIMAGEXP input_buf));
+METHODDEF(boolean) compress_output_xp
+    JPP((j_compress_ptr cinfo, JSAMPIMAGEXP input_buf));
 #endif
 
 
 LOCAL(void)
-start_iMCU_row (j_compress_ptr cinfo)
+start_iMCU_row_xp (j_compress_ptr cinfo)
 /* Reset within-iMCU-row counters for a new row */
 {
-  my_coef_ptr coef = (my_coef_ptr) cinfo->coef;
+  j_compress_ptr_xp xinfo = (j_compress_ptr_xp) cinfo->client_data;
+  my_coef_ptr coef = (my_coef_ptr) xinfo->coef_xp;
 
   /* In an interleaved scan, an MCU row is the same as an iMCU row.
    * In a noninterleaved scan, an iMCU row has v_samp_factor MCU rows.
@@ -97,29 +98,30 @@ start_iMCU_row (j_compress_ptr cinfo)
  */
 
 METHODDEF(void)
-start_pass_coef (j_compress_ptr cinfo, J_BUF_MODE pass_mode)
+start_pass_coef_xp (j_compress_ptr cinfo, J_BUF_MODE pass_mode)
 {
-  my_coef_ptr coef = (my_coef_ptr) cinfo->coef;
+  j_compress_ptr_xp xinfo = (j_compress_ptr_xp) cinfo->client_data;
+  my_coef_ptr coef = (my_coef_ptr) xinfo->coef_xp;
 
   coef->iMCU_row_num = 0;
-  start_iMCU_row(cinfo);
+  start_iMCU_row_xp(cinfo);
 
   switch (pass_mode) {
   case JBUF_PASS_THRU:
     if (coef->whole_image[0] != NULL)
       ERREXIT(cinfo, JERR_BAD_BUFFER_MODE);
-    coef->pub.compress_data = compress_data;
+    coef->pub.compress_data_xp = compress_data_xp;
     break;
 #ifdef FULL_COEF_BUFFER_SUPPORTED
   case JBUF_SAVE_AND_PASS:
     if (coef->whole_image[0] == NULL)
       ERREXIT(cinfo, JERR_BAD_BUFFER_MODE);
-    coef->pub.compress_data = compress_first_pass;
+    coef->pub.compress_data_xp = compress_first_pass_xp;
     break;
   case JBUF_CRANK_DEST:
     if (coef->whole_image[0] == NULL)
       ERREXIT(cinfo, JERR_BAD_BUFFER_MODE);
-    coef->pub.compress_data = compress_output;
+    coef->pub.compress_data_xp = compress_output_xp;
     break;
 #endif
   default:
@@ -140,9 +142,10 @@ start_pass_coef (j_compress_ptr cinfo, J_BUF_MODE pass_mode)
  */
 
 METHODDEF(boolean)
-compress_data (j_compress_ptr cinfo, JSAMPIMAGE input_buf)
+compress_data_xp (j_compress_ptr cinfo, JSAMPIMAGEXP input_buf)
 {
-  my_coef_ptr coef = (my_coef_ptr) cinfo->coef;
+  j_compress_ptr_xp xinfo = (j_compress_ptr_xp) cinfo->client_data;
+  my_coef_ptr coef = (my_coef_ptr) xinfo->coef_xp;
   JDIMENSION MCU_col_num;	/* index of current MCU within row */
   JDIMENSION last_MCU_col = cinfo->MCUs_per_row - 1;
   JDIMENSION last_iMCU_row = cinfo->total_iMCU_rows - 1;
@@ -174,7 +177,7 @@ compress_data (j_compress_ptr cinfo, JSAMPIMAGE input_buf)
 	for (yindex = 0; yindex < compptr->MCU_height; yindex++) {
 	  if (coef->iMCU_row_num < last_iMCU_row ||
 	      yoffset+yindex < compptr->last_row_height) {
-	    (*cinfo->fdct->forward_DCT) (cinfo, compptr,
+	    (*xinfo->fdct_xp->forward_DCT_xp) (cinfo, compptr,
 					 input_buf[compptr->component_index],
 					 coef->MCU_buffer[blkn],
 					 ypos, xpos, (JDIMENSION) blockcnt);
@@ -201,7 +204,7 @@ compress_data (j_compress_ptr cinfo, JSAMPIMAGE input_buf)
       /* Try to write the MCU.  In event of a suspension failure, we will
        * re-DCT the MCU on restart (a bit inefficient, could be fixed...)
        */
-      if (! (*cinfo->entropy->encode_mcu) (cinfo, coef->MCU_buffer)) {
+      if (! (*xinfo->entropy_xp->encode_mcu_xp) (cinfo, coef->MCU_buffer)) {
 	/* Suspension forced; update state counters and exit */
 	coef->MCU_vert_offset = yoffset;
 	coef->mcu_ctr = MCU_col_num;
@@ -213,7 +216,7 @@ compress_data (j_compress_ptr cinfo, JSAMPIMAGE input_buf)
   }
   /* Completed the iMCU row, advance counters for next one */
   coef->iMCU_row_num++;
-  start_iMCU_row(cinfo);
+  start_iMCU_row_xp(cinfo);
   return TRUE;
 }
 
@@ -242,9 +245,10 @@ compress_data (j_compress_ptr cinfo, JSAMPIMAGE input_buf)
  */
 
 METHODDEF(boolean)
-compress_first_pass (j_compress_ptr cinfo, JSAMPIMAGE input_buf)
+compress_first_pass_xp (j_compress_ptr cinfo, JSAMPIMAGEXP input_buf)
 {
-  my_coef_ptr coef = (my_coef_ptr) cinfo->coef;
+  j_compress_ptr_xp xinfo = (j_compress_ptr_xp) cinfo->client_data;
+  my_coef_ptr coef = (my_coef_ptr) xinfo->coef_xp;
   JDIMENSION last_iMCU_row = cinfo->total_iMCU_rows - 1;
   JDIMENSION blocks_across, MCUs_across, MCUindex;
   int bi, ci, h_samp_factor, block_row, block_rows, ndummy;
@@ -279,7 +283,7 @@ compress_first_pass (j_compress_ptr cinfo, JSAMPIMAGE input_buf)
      */
     for (block_row = 0; block_row < block_rows; block_row++) {
       thisblockrow = buffer[block_row];
-      (*cinfo->fdct->forward_DCT) (cinfo, compptr,
+      (*xinfo->fdct_xp->forward_DCT_xp) (cinfo, compptr,
 				   input_buf[ci], thisblockrow,
 				   (JDIMENSION) (block_row * DCTSIZE),
 				   (JDIMENSION) 0, blocks_across);
@@ -323,7 +327,7 @@ compress_first_pass (j_compress_ptr cinfo, JSAMPIMAGE input_buf)
    */
 
   /* Emit data to the entropy encoder, sharing code with subsequent passes */
-  return compress_output(cinfo, input_buf);
+  return compress_output_xp(cinfo, input_buf);
 }
 
 
@@ -338,9 +342,10 @@ compress_first_pass (j_compress_ptr cinfo, JSAMPIMAGE input_buf)
  */
 
 METHODDEF(boolean)
-compress_output (j_compress_ptr cinfo, JSAMPIMAGE input_buf)
+compress_output_xp (j_compress_ptr cinfo, JSAMPIMAGEXP input_buf)
 {
-  my_coef_ptr coef = (my_coef_ptr) cinfo->coef;
+  j_compress_ptr_xp xinfo = (j_compress_ptr_xp) cinfo->client_data;
+  my_coef_ptr coef = (my_coef_ptr) xinfo->coef_xp;
   JDIMENSION MCU_col_num;	/* index of current MCU within row */
   int blkn, ci, xindex, yindex, yoffset;
   JDIMENSION start_col;
@@ -378,7 +383,7 @@ compress_output (j_compress_ptr cinfo, JSAMPIMAGE input_buf)
 	}
       }
       /* Try to write the MCU. */
-      if (! (*cinfo->entropy->encode_mcu) (cinfo, coef->MCU_buffer)) {
+      if (! (*xinfo->entropy_xp->encode_mcu_xp) (cinfo, coef->MCU_buffer)) {
 	/* Suspension forced; update state counters and exit */
 	coef->MCU_vert_offset = yoffset;
 	coef->mcu_ctr = MCU_col_num;
@@ -390,7 +395,7 @@ compress_output (j_compress_ptr cinfo, JSAMPIMAGE input_buf)
   }
   /* Completed the iMCU row, advance counters for next one */
   coef->iMCU_row_num++;
-  start_iMCU_row(cinfo);
+  start_iMCU_row_xp(cinfo);
   return TRUE;
 }
 
@@ -402,15 +407,16 @@ compress_output (j_compress_ptr cinfo, JSAMPIMAGE input_buf)
  */
 
 GLOBAL(void)
-jinit_c_coef_controller (j_compress_ptr cinfo, boolean need_full_buffer)
+jinit_c_coef_controller_xp (j_compress_ptr cinfo, boolean need_full_buffer)
 {
+  j_compress_ptr_xp xinfo = (j_compress_ptr_xp) cinfo->client_data;
   my_coef_ptr coef;
 
   coef = (my_coef_ptr)
     (*cinfo->mem->alloc_small) ((j_common_ptr) cinfo, JPOOL_IMAGE,
-				SIZEOF(my_coef_controller));
-  cinfo->coef = (struct jpeg_c_coef_controller *) coef;
-  coef->pub.start_pass = start_pass_coef;
+				SIZEOF(my_coef_controller_xp));
+  xinfo->coef_xp = (struct jpeg_c_coef_controller_xp *) coef;
+  coef->pub.start_pass_xp = start_pass_coef_xp;
 
   /* Create the coefficient buffer. */
   if (need_full_buffer) {

@@ -1,5 +1,5 @@
 /*
- * jcapimin.c
+ * xjcapimin.c
  *
  * Copyright (C) 1994-1998, Thomas G. Lane.
  * This file is part of the Independent JPEG Group's software.
@@ -18,7 +18,7 @@
 
 #define JPEG_INTERNALS
 #include "jinclude.h"
-#include "jpeglib.h"
+#include "xjpeglib.h"
 
 
 /*
@@ -27,9 +27,10 @@
  */
 
 GLOBAL(void)
-jpeg_CreateCompress (j_compress_ptr cinfo, int version, size_t structsize)
+jpeg_CreateCompress_xp (j_compress_ptr cinfo, int version, size_t structsize)
 {
   int i;
+  j_compress_ptr_xp xinfo;
 
   /* Guard against version mismatches between library and caller. */
   cinfo->mem = NULL;		/* so jpeg_destroy knows mem mgr not called */
@@ -55,11 +56,16 @@ jpeg_CreateCompress (j_compress_ptr cinfo, int version, size_t structsize)
   cinfo->is_decompressor = FALSE;
 
   /* Initialize a memory manager instance for this object */
-  jinit_memory_mgr((j_common_ptr) cinfo);
+  jinit_memory_mgr_xp((j_common_ptr) cinfo);
+
+  xinfo = (j_compress_ptr_xp)
+    (*cinfo->mem->alloc_small) ((j_common_ptr) cinfo, JPOOL_PERMANENT,
+        SIZEOF(jpeg_compress_struct_xp));
+  cinfo->client_data = (void*) xinfo;
 
   /* Zero out pointers to permanent structures. */
   cinfo->progress = NULL;
-  cinfo->dest = NULL;
+  xinfo->dest_xp = NULL;
 
   cinfo->comp_info = NULL;
 
@@ -85,9 +91,9 @@ jpeg_CreateCompress (j_compress_ptr cinfo, int version, size_t structsize)
  */
 
 GLOBAL(void)
-jpeg_destroy_compress (j_compress_ptr cinfo)
+jpeg_destroy_compress_xp (j_compress_ptr cinfo)
 {
-  jpeg_destroy((j_common_ptr) cinfo); /* use common routine */
+  jpeg_destroy_xp((j_common_ptr) cinfo); /* use common routine */
 }
 
 
@@ -97,9 +103,9 @@ jpeg_destroy_compress (j_compress_ptr cinfo)
  */
 
 GLOBAL(void)
-jpeg_abort_compress (j_compress_ptr cinfo)
+jpeg_abort_compress_xp (j_compress_ptr cinfo)
 {
-  jpeg_abort((j_common_ptr) cinfo); /* use common routine */
+  jpeg_abort_xp((j_common_ptr) cinfo); /* use common routine */
 }
 
 
@@ -116,7 +122,7 @@ jpeg_abort_compress (j_compress_ptr cinfo)
  */
 
 GLOBAL(void)
-jpeg_suppress_tables (j_compress_ptr cinfo, boolean suppress)
+jpeg_suppress_tables_xp (j_compress_ptr cinfo, boolean suppress)
 {
   int i;
   JQUANT_TBL * qtbl;
@@ -144,8 +150,9 @@ jpeg_suppress_tables (j_compress_ptr cinfo, boolean suppress)
  */
 
 GLOBAL(void)
-jpeg_finish_compress (j_compress_ptr cinfo)
+jpeg_finish_compress_xp (j_compress_ptr cinfo)
 {
+  j_compress_ptr_xp xinfo = (j_compress_ptr_xp) cinfo->client_data;
   JDIMENSION iMCU_row;
 
   if (cinfo->global_state == CSTATE_SCANNING ||
@@ -153,12 +160,12 @@ jpeg_finish_compress (j_compress_ptr cinfo)
     /* Terminate first pass */
     if (cinfo->next_scanline < cinfo->image_height)
       ERREXIT(cinfo, JERR_TOO_LITTLE_DATA);
-    (*cinfo->master->finish_pass) (cinfo);
+    (*xinfo->master_xp->finish_pass_xp) (cinfo);
   } else if (cinfo->global_state != CSTATE_WRCOEFS)
     ERREXIT1(cinfo, JERR_BAD_STATE, cinfo->global_state);
   /* Perform any remaining passes */
-  while (! cinfo->master->is_last_pass) {
-    (*cinfo->master->prepare_for_pass) (cinfo);
+  while (! xinfo->master_xp->is_last_pass) {
+    (*xinfo->master_xp->prepare_for_pass_xp) (cinfo);
     for (iMCU_row = 0; iMCU_row < cinfo->total_iMCU_rows; iMCU_row++) {
       if (cinfo->progress != NULL) {
 	cinfo->progress->pass_counter = (long) iMCU_row;
@@ -168,16 +175,16 @@ jpeg_finish_compress (j_compress_ptr cinfo)
       /* We bypass the main controller and invoke coef controller directly;
        * all work is being done from the coefficient buffer.
        */
-      if (! (*cinfo->coef->compress_data) (cinfo, (JSAMPIMAGE) NULL))
+      if (! (*xinfo->coef_xp->compress_data_xp) (cinfo, (JSAMPIMAGEXP) NULL))
 	ERREXIT(cinfo, JERR_CANT_SUSPEND);
     }
-    (*cinfo->master->finish_pass) (cinfo);
+    (*xinfo->master_xp->finish_pass_xp) (cinfo);
   }
   /* Write EOI, do final cleanup */
-  (*cinfo->marker->write_file_trailer) (cinfo);
-  (*cinfo->dest->term_destination) (cinfo);
+  (*xinfo->marker_xp->write_file_trailer_xp) (cinfo);
+  (*xinfo->dest_xp->term_destination_xp) (cinfo);
   /* We can use jpeg_abort to release memory and reset global_state */
-  jpeg_abort((j_common_ptr) cinfo);
+  jpeg_abort_xp((j_common_ptr) cinfo);
 }
 
 
@@ -189,10 +196,11 @@ jpeg_finish_compress (j_compress_ptr cinfo)
  */
 
 GLOBAL(void)
-jpeg_write_marker (j_compress_ptr cinfo, int marker,
+jpeg_write_marker_xp (j_compress_ptr cinfo, int marker,
 		   const JOCTET *dataptr, unsigned int datalen)
 {
-  JMETHOD(void, write_marker_byte, (j_compress_ptr info, int val));
+  j_compress_ptr_xp xinfo = (j_compress_ptr_xp) cinfo->client_data;
+  JMETHOD(void, write_marker_byte_xp, (j_compress_ptr info, int val));
 
   if (cinfo->next_scanline != 0 ||
       (cinfo->global_state != CSTATE_SCANNING &&
@@ -200,10 +208,10 @@ jpeg_write_marker (j_compress_ptr cinfo, int marker,
        cinfo->global_state != CSTATE_WRCOEFS))
     ERREXIT1(cinfo, JERR_BAD_STATE, cinfo->global_state);
 
-  (*cinfo->marker->write_marker_header) (cinfo, marker, datalen);
-  write_marker_byte = cinfo->marker->write_marker_byte;	/* copy for speed */
+  (*xinfo->marker_xp->write_marker_header_xp) (cinfo, marker, datalen);
+  write_marker_byte_xp = xinfo->marker_xp->write_marker_byte_xp;	/* copy for speed */
   while (datalen--) {
-    (*write_marker_byte) (cinfo, *dataptr);
+    (*write_marker_byte_xp) (cinfo, *dataptr);
     dataptr++;
   }
 }
@@ -211,21 +219,23 @@ jpeg_write_marker (j_compress_ptr cinfo, int marker,
 /* Same, but piecemeal. */
 
 GLOBAL(void)
-jpeg_write_m_header (j_compress_ptr cinfo, int marker, unsigned int datalen)
+jpeg_write_m_header_xp (j_compress_ptr cinfo, int marker, unsigned int datalen)
 {
+  j_compress_ptr_xp xinfo = (j_compress_ptr_xp) cinfo->client_data;
   if (cinfo->next_scanline != 0 ||
       (cinfo->global_state != CSTATE_SCANNING &&
        cinfo->global_state != CSTATE_RAW_OK &&
        cinfo->global_state != CSTATE_WRCOEFS))
     ERREXIT1(cinfo, JERR_BAD_STATE, cinfo->global_state);
 
-  (*cinfo->marker->write_marker_header) (cinfo, marker, datalen);
+  (*xinfo->marker_xp->write_marker_header_xp) (cinfo, marker, datalen);
 }
 
 GLOBAL(void)
-jpeg_write_m_byte (j_compress_ptr cinfo, int val)
+jpeg_write_m_byte_xp (j_compress_ptr cinfo, int val)
 {
-  (*cinfo->marker->write_marker_byte) (cinfo, val);
+  j_compress_ptr_xp xinfo = (j_compress_ptr_xp) cinfo->client_data;
+  (*xinfo->marker_xp->write_marker_byte_xp) (cinfo, val);
 }
 
 
@@ -251,20 +261,21 @@ jpeg_write_m_byte (j_compress_ptr cinfo, int val)
  */
 
 GLOBAL(void)
-jpeg_write_tables (j_compress_ptr cinfo)
+jpeg_write_tables_xp (j_compress_ptr cinfo)
 {
+  j_compress_ptr_xp xinfo = (j_compress_ptr_xp) cinfo->client_data;
   if (cinfo->global_state != CSTATE_START)
     ERREXIT1(cinfo, JERR_BAD_STATE, cinfo->global_state);
 
   /* (Re)initialize error mgr and destination modules */
   (*cinfo->err->reset_error_mgr) ((j_common_ptr) cinfo);
-  (*cinfo->dest->init_destination) (cinfo);
+  (*xinfo->dest_xp->init_destination_xp) (cinfo);
   /* Initialize the marker writer ... bit of a crock to do it here. */
-  jinit_marker_writer(cinfo);
+  jinit_marker_writer_xp(cinfo);
   /* Write them tables! */
-  (*cinfo->marker->write_tables_only) (cinfo);
+  (*xinfo->marker_xp->write_tables_only_xp) (cinfo);
   /* And clean up. */
-  (*cinfo->dest->term_destination) (cinfo);
+  (*xinfo->dest_xp->term_destination_xp) (cinfo);
   /*
    * In library releases up through v6a, we called jpeg_abort() here to free
    * any working memory allocated by the destination manager and marker

@@ -1,5 +1,5 @@
 /*
- * jidctfst.c
+ * xjidctfst.c
  *
  * Copyright (C) 1994-1998, Thomas G. Lane.
  * This file is part of the Independent JPEG Group's software.
@@ -34,8 +34,8 @@
 
 #define JPEG_INTERNALS
 #include "jinclude.h"
-#include "jpeglib.h"
-#include "jdct.h"		/* Private declarations for DCT subsystem */
+#include "xjpeglib.h"
+#include "xjdct.h"		/* Private declarations for DCT subsystem */
 
 #ifdef DCT_IFAST_SUPPORTED
 
@@ -73,7 +73,7 @@
  * are fewer one-bits in the constants).
  */
 
-#if BITS_IN_JSAMPLE == 8
+#if BITS_IN_JSAMPLE12 == 8
 #define CONST_BITS  8
 #define PASS1_BITS  2
 #else
@@ -125,7 +125,7 @@
  * declared INT32, so a 32-bit multiply will be used.
  */
 
-#if BITS_IN_JSAMPLE == 8
+#if BITS_IN_JSAMPLE12 == 8
 #define DEQUANTIZE(coef,quantval)  (((IFAST_MULT_TYPE) (coef)) * (quantval))
 #else
 #define DEQUANTIZE(coef,quantval)  \
@@ -139,7 +139,7 @@
 
 #ifdef RIGHT_SHIFT_IS_UNSIGNED
 #define ISHIFT_TEMPS	DCTELEM ishift_temp;
-#if BITS_IN_JSAMPLE == 8
+#if BITS_IN_JSAMPLE12 == 8
 #define DCTELEMBITS  16		/* DCTELEM may be 16 or 32 bits */
 #else
 #define DCTELEMBITS  32		/* DCTELEM must be 32 bits */
@@ -165,18 +165,19 @@
  */
 
 GLOBAL(void)
-jpeg_idct_ifast (j_decompress_ptr cinfo, jpeg_component_info * compptr,
+jpeg_idct_ifast_xp (j_decompress_ptr cinfo, jpeg_component_info * compptr,
 		 JCOEFPTR coef_block,
-		 JSAMPARRAY output_buf, JDIMENSION output_col)
+		 JSAMPARRAYXP output_buf, JDIMENSION output_col)
 {
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
   DCTELEM tmp0, tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7;
   DCTELEM tmp10, tmp11, tmp12, tmp13;
   DCTELEM z5, z10, z11, z12, z13;
   JCOEFPTR inptr;
   IFAST_MULT_TYPE * quantptr;
   int * wsptr;
-  JSAMPROW outptr;
-  JSAMPLE *range_limit = IDCT_range_limit(cinfo);
+  JSAMPROWXP outptr;
+  JSAMPLEXP *range_limit = IDCT_range_limit(xinfo);
   int ctr;
   int workspace[DCTSIZE2];	/* buffers data between passes */
   SHIFT_TEMPS			/* for DESCALE */
@@ -293,7 +294,7 @@ jpeg_idct_ifast (j_decompress_ptr cinfo, jpeg_component_info * compptr,
     if (wsptr[1] == 0 && wsptr[2] == 0 && wsptr[3] == 0 && wsptr[4] == 0 &&
 	wsptr[5] == 0 && wsptr[6] == 0 && wsptr[7] == 0) {
       /* AC terms all zero */
-      JSAMPLE dcval = range_limit[IDESCALE(wsptr[0], PASS1_BITS+3)
+      JSAMPLEXP dcval = range_limit[IDESCALE(wsptr[0], PASS1_BITS+3)
 				  & RANGE_MASK];
       
       outptr[0] = dcval;

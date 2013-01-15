@@ -1,5 +1,5 @@
 /*
- * jcapistd.c
+ * xjcapistd.c
  *
  * Copyright (C) 1994-1996, Thomas G. Lane.
  * This file is part of the Independent JPEG Group's software.
@@ -16,7 +16,7 @@
 
 #define JPEG_INTERNALS
 #include "jinclude.h"
-#include "jpeglib.h"
+#include "xjpeglib.h"
 
 
 /*
@@ -35,21 +35,22 @@
  */
 
 GLOBAL(void)
-jpeg_start_compress (j_compress_ptr cinfo, boolean write_all_tables)
+jpeg_start_compress_xp (j_compress_ptr cinfo, boolean write_all_tables)
 {
+  j_compress_ptr_xp xinfo = (j_compress_ptr_xp) cinfo->client_data;
   if (cinfo->global_state != CSTATE_START)
     ERREXIT1(cinfo, JERR_BAD_STATE, cinfo->global_state);
 
   if (write_all_tables)
-    jpeg_suppress_tables(cinfo, FALSE);	/* mark all tables to be written */
+    jpeg_suppress_tables_xp(cinfo, FALSE);	/* mark all tables to be written */
 
   /* (Re)initialize error mgr and destination modules */
   (*cinfo->err->reset_error_mgr) ((j_common_ptr) cinfo);
-  (*cinfo->dest->init_destination) (cinfo);
+  (*xinfo->dest_xp->init_destination_xp) (cinfo);
   /* Perform master selection of active modules */
-  jinit_compress_master(cinfo);
+  jinit_compress_master_xp(cinfo);
   /* Set up for the first pass */
-  (*cinfo->master->prepare_for_pass) (cinfo);
+  (*xinfo->master_xp->prepare_for_pass_xp) (cinfo);
   /* Ready for application to drive first pass through jpeg_write_scanlines
    * or jpeg_write_raw_data.
    */
@@ -74,9 +75,10 @@ jpeg_start_compress (j_compress_ptr cinfo, boolean write_all_tables)
  */
 
 GLOBAL(JDIMENSION)
-jpeg_write_scanlines (j_compress_ptr cinfo, JSAMPARRAY scanlines,
+jpeg_write_scanlines_xp (j_compress_ptr cinfo, JSAMPARRAYXP scanlines,
 		      JDIMENSION num_lines)
 {
+  j_compress_ptr_xp xinfo = (j_compress_ptr_xp) cinfo->client_data;
   JDIMENSION row_ctr, rows_left;
 
   if (cinfo->global_state != CSTATE_SCANNING)
@@ -96,8 +98,8 @@ jpeg_write_scanlines (j_compress_ptr cinfo, JSAMPARRAY scanlines,
    * delayed so that application can write COM, etc, markers between
    * jpeg_start_compress and jpeg_write_scanlines.
    */
-  if (cinfo->master->call_pass_startup)
-    (*cinfo->master->pass_startup) (cinfo);
+  if (xinfo->master_xp->call_pass_startup)
+    (*xinfo->master_xp->pass_startup_xp) (cinfo);
 
   /* Ignore any extra scanlines at bottom of image. */
   rows_left = cinfo->image_height - cinfo->next_scanline;
@@ -105,7 +107,7 @@ jpeg_write_scanlines (j_compress_ptr cinfo, JSAMPARRAY scanlines,
     num_lines = rows_left;
 
   row_ctr = 0;
-  (*cinfo->main->process_data) (cinfo, scanlines, &row_ctr, num_lines);
+  (*xinfo->main_xp->process_data_xp) (cinfo, scanlines, &row_ctr, num_lines);
   cinfo->next_scanline += row_ctr;
   return row_ctr;
 }
@@ -117,9 +119,10 @@ jpeg_write_scanlines (j_compress_ptr cinfo, JSAMPARRAY scanlines,
  */
 
 GLOBAL(JDIMENSION)
-jpeg_write_raw_data (j_compress_ptr cinfo, JSAMPIMAGE data,
+jpeg_write_raw_data_xp (j_compress_ptr cinfo, JSAMPIMAGEXP data,
 		     JDIMENSION num_lines)
 {
+  j_compress_ptr_xp xinfo = (j_compress_ptr_xp) cinfo->client_data;
   JDIMENSION lines_per_iMCU_row;
 
   if (cinfo->global_state != CSTATE_RAW_OK)
@@ -141,8 +144,8 @@ jpeg_write_raw_data (j_compress_ptr cinfo, JSAMPIMAGE data,
    * delayed so that application can write COM, etc, markers between
    * jpeg_start_compress and jpeg_write_raw_data.
    */
-  if (cinfo->master->call_pass_startup)
-    (*cinfo->master->pass_startup) (cinfo);
+  if (xinfo->master_xp->call_pass_startup)
+    (*xinfo->master_xp->pass_startup_xp) (cinfo);
 
   /* Verify that at least one iMCU row has been passed. */
   lines_per_iMCU_row = cinfo->max_v_samp_factor * DCTSIZE;
@@ -150,7 +153,7 @@ jpeg_write_raw_data (j_compress_ptr cinfo, JSAMPIMAGE data,
     ERREXIT(cinfo, JERR_BUFFER_SIZE);
 
   /* Directly compress the row. */
-  if (! (*cinfo->coef->compress_data) (cinfo, data)) {
+  if (! (*xinfo->coef_xp->compress_data_xp) (cinfo, data)) {
     /* If compressor did not consume the whole row, suspend processing. */
     return 0;
   }

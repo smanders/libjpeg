@@ -1,5 +1,5 @@
 /*
- * jdatadst.c
+ * xjdatadst.c
  *
  * Copyright (C) 1994-1996, Thomas G. Lane.
  * This file is part of the Independent JPEG Group's software.
@@ -16,14 +16,14 @@
 
 /* this is not a core library module, so it doesn't define JPEG_INTERNALS */
 #include "jinclude.h"
-#include "jpeglib.h"
+#include "xjpeglib.h"
 #include "jerror.h"
 
 
 /* Expanded data destination object for stdio output */
 
 typedef struct {
-  struct jpeg_destination_mgr pub; /* public fields */
+  struct jpeg_destination_mgr_xp pub; /* public fields */
 
   FILE * outfile;		/* target stream */
   JOCTET * buffer;		/* start of buffer */
@@ -40,9 +40,10 @@ typedef my_destination_mgr * my_dest_ptr;
  */
 
 METHODDEF(void)
-init_destination (j_compress_ptr cinfo)
+init_destination_xp (j_compress_ptr cinfo)
 {
-  my_dest_ptr dest = (my_dest_ptr) cinfo->dest;
+  j_compress_ptr_xp xinfo = (j_compress_ptr_xp) cinfo->client_data;
+  my_dest_ptr dest = (my_dest_ptr) xinfo->dest_xp;
 
   /* Allocate the output buffer --- it will be released when done with image */
   dest->buffer = (JOCTET *)
@@ -78,9 +79,10 @@ init_destination (j_compress_ptr cinfo)
  */
 
 METHODDEF(boolean)
-empty_output_buffer (j_compress_ptr cinfo)
+empty_output_buffer_xp (j_compress_ptr cinfo)
 {
-  my_dest_ptr dest = (my_dest_ptr) cinfo->dest;
+  j_compress_ptr_xp xinfo = (j_compress_ptr_xp) cinfo->client_data;
+  my_dest_ptr dest = (my_dest_ptr) xinfo->dest_xp;
 
   if (JFWRITE(dest->outfile, dest->buffer, OUTPUT_BUF_SIZE) !=
       (size_t) OUTPUT_BUF_SIZE)
@@ -103,9 +105,10 @@ empty_output_buffer (j_compress_ptr cinfo)
  */
 
 METHODDEF(void)
-term_destination (j_compress_ptr cinfo)
+term_destination_xp (j_compress_ptr cinfo)
 {
-  my_dest_ptr dest = (my_dest_ptr) cinfo->dest;
+  j_compress_ptr_xp xinfo = (j_compress_ptr_xp) cinfo->client_data;
+  my_dest_ptr dest = (my_dest_ptr) xinfo->dest_xp;
   size_t datacount = OUTPUT_BUF_SIZE - dest->pub.free_in_buffer;
 
   /* Write any data remaining in the buffer */
@@ -127,8 +130,9 @@ term_destination (j_compress_ptr cinfo)
  */
 
 GLOBAL(void)
-jpeg_stdio_dest (j_compress_ptr cinfo, FILE * outfile)
+jpeg_stdio_dest_xp (j_compress_ptr cinfo, FILE * outfile)
 {
+  j_compress_ptr_xp xinfo = (j_compress_ptr_xp) cinfo->client_data;
   my_dest_ptr dest;
 
   /* The destination object is made permanent so that multiple JPEG images
@@ -137,15 +141,15 @@ jpeg_stdio_dest (j_compress_ptr cinfo, FILE * outfile)
    * manager serially with the same JPEG object, because their private object
    * sizes may be different.  Caveat programmer.
    */
-  if (cinfo->dest == NULL) {	/* first time for this JPEG object? */
-    cinfo->dest = (struct jpeg_destination_mgr *)
+  if (xinfo->dest_xp == NULL) {	/* first time for this JPEG object? */
+    xinfo->dest_xp = (struct jpeg_destination_mgr_xp *)
       (*cinfo->mem->alloc_small) ((j_common_ptr) cinfo, JPOOL_PERMANENT,
 				  SIZEOF(my_destination_mgr));
   }
 
-  dest = (my_dest_ptr) cinfo->dest;
-  dest->pub.init_destination = init_destination;
-  dest->pub.empty_output_buffer = empty_output_buffer;
-  dest->pub.term_destination = term_destination;
+  dest = (my_dest_ptr) xinfo->dest_xp;
+  dest->pub.init_destination_xp = init_destination_xp;
+  dest->pub.empty_output_buffer_xp = empty_output_buffer_xp;
+  dest->pub.term_destination_xp = term_destination_xp;
   dest->outfile = outfile;
 }

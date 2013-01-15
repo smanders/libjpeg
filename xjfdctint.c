@@ -1,5 +1,5 @@
 /*
- * jfdctint.c
+ * xjfdctint.c
  *
  * Copyright (C) 1991-1996, Thomas G. Lane.
  * This file is part of the Independent JPEG Group's software.
@@ -25,8 +25,8 @@
 
 #define JPEG_INTERNALS
 #include "jinclude.h"
-#include "jpeglib.h"
-#include "jdct.h"		/* Private declarations for DCT subsystem */
+#include "xjpeglib.h"
+#include "xjdct.h"		/* Private declarations for DCT subsystem */
 
 #ifdef DCT_ISLOW_SUPPORTED
 
@@ -74,7 +74,7 @@
  * shows that the values given below are the most effective.
  */
 
-#if BITS_IN_JSAMPLE == 8
+#if BITS_IN_JSAMPLE12 == 8
 #define CONST_BITS  13
 #define PASS1_BITS  2
 #else
@@ -125,7 +125,7 @@
  * For 12-bit samples, a full 32-bit multiplication will be needed.
  */
 
-#if BITS_IN_JSAMPLE == 8
+#if BITS_IN_JSAMPLE12 == 8
 #define MULTIPLY(var,const)  MULTIPLY16C16(var,const)
 #else
 #define MULTIPLY(var,const)  ((var) * (const))
@@ -137,7 +137,7 @@
  */
 
 GLOBAL(void)
-jpeg_fdct_islow (DCTELEM * data)
+jpeg_fdct_islow_xp (DCTELEM * data)
 {
   INT32 tmp0, tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7;
   INT32 tmp10, tmp11, tmp12, tmp13;

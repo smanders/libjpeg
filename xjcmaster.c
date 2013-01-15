@@ -1,5 +1,5 @@
 /*
- * jcmaster.c
+ * xjcmaster.c
  *
  * Copyright (C) 1991-1997, Thomas G. Lane.
  * This file is part of the Independent JPEG Group's software.
@@ -13,7 +13,7 @@
 
 #define JPEG_INTERNALS
 #include "jinclude.h"
-#include "jpeglib.h"
+#include "xjpeglib.h"
 
 
 /* Private state */
@@ -25,7 +25,7 @@ typedef enum {
 } c_pass_type;
 
 typedef struct {
-  struct jpeg_comp_master pub;	/* public fields */
+  struct jpeg_comp_master_xp pub;	/* public fields */
 
   c_pass_type pass_type;	/* the type of the current pass */
 
@@ -43,7 +43,7 @@ typedef my_comp_master * my_master_ptr;
  */
 
 LOCAL(void)
-initial_setup (j_compress_ptr cinfo)
+initial_setup_xp (j_compress_ptr cinfo)
 /* Do computations that are needed before master selection phase */
 {
   int ci;
@@ -68,7 +68,7 @@ initial_setup (j_compress_ptr cinfo)
     ERREXIT(cinfo, JERR_WIDTH_OVERFLOW);
 
   /* For now, precision must match compiled-in value... */
-  if (cinfo->data_precision != BITS_IN_JSAMPLE)
+  if (cinfo->data_precision != BITS_IN_JSAMPLE12)
     ERREXIT1(cinfo, JERR_BAD_PRECISION, cinfo->data_precision);
 
   /* Check that number of components won't exceed internal array sizes */
@@ -127,7 +127,7 @@ initial_setup (j_compress_ptr cinfo)
 #ifdef C_MULTISCAN_FILES_SUPPORTED
 
 LOCAL(void)
-validate_script (j_compress_ptr cinfo)
+validate_script_xp (j_compress_ptr cinfo)
 /* Verify that the scan script in cinfo->scan_info[] is valid; also
  * determine whether it uses progressive JPEG, and set cinfo->progressive_mode.
  */
@@ -192,7 +192,7 @@ validate_script (j_compress_ptr cinfo)
        * out-of-range reconstructed DC values during the first DC scan,
        * which might cause problems for some decoders.
        */
-#if BITS_IN_JSAMPLE == 8
+#if BITS_IN_JSAMPLE12 == 8
 #define MAX_AH_AL 10
 #else
 #define MAX_AH_AL 13
@@ -264,15 +264,16 @@ validate_script (j_compress_ptr cinfo)
 
 
 LOCAL(void)
-select_scan_parameters (j_compress_ptr cinfo)
+select_scan_parameters_xp (j_compress_ptr cinfo)
 /* Set up the scan parameters for the current scan */
 {
+  j_compress_ptr_xp xinfo = (j_compress_ptr_xp) cinfo->client_data;
   int ci;
 
 #ifdef C_MULTISCAN_FILES_SUPPORTED
   if (cinfo->scan_info != NULL) {
     /* Prepare for current scan --- the script is already validated */
-    my_master_ptr master = (my_master_ptr) cinfo->master;
+    my_master_ptr master = (my_master_ptr) xinfo->master_xp;
     const jpeg_scan_info * scanptr = cinfo->scan_info + master->scan_number;
 
     cinfo->comps_in_scan = scanptr->comps_in_scan;
@@ -305,7 +306,7 @@ select_scan_parameters (j_compress_ptr cinfo)
 
 
 LOCAL(void)
-per_scan_setup (j_compress_ptr cinfo)
+per_scan_setup_xp (j_compress_ptr cinfo)
 /* Do computations that are needed before processing a JPEG scan */
 /* cinfo->comps_in_scan and cinfo->cur_comp_info[] are already set */
 {
@@ -398,28 +399,29 @@ per_scan_setup (j_compress_ptr cinfo)
  */
 
 METHODDEF(void)
-prepare_for_pass (j_compress_ptr cinfo)
+prepare_for_pass_xp (j_compress_ptr cinfo)
 {
-  my_master_ptr master = (my_master_ptr) cinfo->master;
+  j_compress_ptr_xp xinfo = (j_compress_ptr_xp) cinfo->client_data;
+  my_master_ptr master = (my_master_ptr) xinfo->master_xp;
 
   switch (master->pass_type) {
   case main_pass:
     /* Initial pass: will collect input data, and do either Huffman
      * optimization or data output for the first scan.
      */
-    select_scan_parameters(cinfo);
-    per_scan_setup(cinfo);
+    select_scan_parameters_xp(cinfo);
+    per_scan_setup_xp(cinfo);
     if (! cinfo->raw_data_in) {
-      (*cinfo->cconvert->start_pass) (cinfo);
-      (*cinfo->downsample->start_pass) (cinfo);
-      (*cinfo->prep->start_pass) (cinfo, JBUF_PASS_THRU);
+      (*xinfo->cconvert_xp->start_pass_xp) (cinfo);
+      (*xinfo->downsample_xp->start_pass_xp) (cinfo);
+      (*xinfo->prep_xp->start_pass_xp) (cinfo, JBUF_PASS_THRU);
     }
-    (*cinfo->fdct->start_pass) (cinfo);
-    (*cinfo->entropy->start_pass) (cinfo, cinfo->optimize_coding);
-    (*cinfo->coef->start_pass) (cinfo,
+    (*xinfo->fdct_xp->start_pass_xp) (cinfo);
+    (*xinfo->entropy_xp->start_pass_xp) (cinfo, cinfo->optimize_coding);
+    (*xinfo->coef_xp->start_pass_xp) (cinfo,
 				(master->total_passes > 1 ?
 				 JBUF_SAVE_AND_PASS : JBUF_PASS_THRU));
-    (*cinfo->main->start_pass) (cinfo, JBUF_PASS_THRU);
+    (*xinfo->main_xp->start_pass_xp) (cinfo, JBUF_PASS_THRU);
     if (cinfo->optimize_coding) {
       /* No immediate data output; postpone writing frame/scan headers */
       master->pub.call_pass_startup = FALSE;
@@ -431,11 +433,11 @@ prepare_for_pass (j_compress_ptr cinfo)
 #ifdef ENTROPY_OPT_SUPPORTED
   case huff_opt_pass:
     /* Do Huffman optimization for a scan after the first one. */
-    select_scan_parameters(cinfo);
-    per_scan_setup(cinfo);
+    select_scan_parameters_xp(cinfo);
+    per_scan_setup_xp(cinfo);
     if (cinfo->Ss != 0 || cinfo->Ah == 0 || cinfo->arith_code) {
-      (*cinfo->entropy->start_pass) (cinfo, TRUE);
-      (*cinfo->coef->start_pass) (cinfo, JBUF_CRANK_DEST);
+      (*xinfo->entropy_xp->start_pass_xp) (cinfo, TRUE);
+      (*xinfo->coef_xp->start_pass_xp) (cinfo, JBUF_CRANK_DEST);
       master->pub.call_pass_startup = FALSE;
       break;
     }
@@ -450,15 +452,15 @@ prepare_for_pass (j_compress_ptr cinfo)
     /* Do a data-output pass. */
     /* We need not repeat per-scan setup if prior optimization pass did it. */
     if (! cinfo->optimize_coding) {
-      select_scan_parameters(cinfo);
-      per_scan_setup(cinfo);
+      select_scan_parameters_xp(cinfo);
+      per_scan_setup_xp(cinfo);
     }
-    (*cinfo->entropy->start_pass) (cinfo, FALSE);
-    (*cinfo->coef->start_pass) (cinfo, JBUF_CRANK_DEST);
+    (*xinfo->entropy_xp->start_pass_xp) (cinfo, FALSE);
+    (*xinfo->coef_xp->start_pass_xp) (cinfo, JBUF_CRANK_DEST);
     /* We emit frame/scan headers now */
     if (master->scan_number == 0)
-      (*cinfo->marker->write_frame_header) (cinfo);
-    (*cinfo->marker->write_scan_header) (cinfo);
+      (*xinfo->marker_xp->write_frame_header_xp) (cinfo);
+    (*xinfo->marker_xp->write_scan_header_xp) (cinfo);
     master->pub.call_pass_startup = FALSE;
     break;
   default:
@@ -486,12 +488,13 @@ prepare_for_pass (j_compress_ptr cinfo)
  */
 
 METHODDEF(void)
-pass_startup (j_compress_ptr cinfo)
+pass_startup_xp (j_compress_ptr cinfo)
 {
-  cinfo->master->call_pass_startup = FALSE; /* reset flag so call only once */
+  j_compress_ptr_xp xinfo = (j_compress_ptr_xp) cinfo->client_data;
+  xinfo->master_xp->call_pass_startup = FALSE; /* reset flag so call only once */
 
-  (*cinfo->marker->write_frame_header) (cinfo);
-  (*cinfo->marker->write_scan_header) (cinfo);
+  (*xinfo->marker_xp->write_frame_header_xp) (cinfo);
+  (*xinfo->marker_xp->write_scan_header_xp) (cinfo);
 }
 
 
@@ -500,14 +503,15 @@ pass_startup (j_compress_ptr cinfo)
  */
 
 METHODDEF(void)
-finish_pass_master (j_compress_ptr cinfo)
+finish_pass_master_xp (j_compress_ptr cinfo)
 {
-  my_master_ptr master = (my_master_ptr) cinfo->master;
+  j_compress_ptr_xp xinfo = (j_compress_ptr_xp) cinfo->client_data;
+  my_master_ptr master = (my_master_ptr) xinfo->master_xp;
 
   /* The entropy coder always needs an end-of-pass call,
    * either to analyze statistics or to flush its output buffer.
    */
-  (*cinfo->entropy->finish_pass) (cinfo);
+  (*xinfo->entropy_xp->finish_pass_xp) (cinfo);
 
   /* Update state for next pass */
   switch (master->pass_type) {
@@ -540,25 +544,26 @@ finish_pass_master (j_compress_ptr cinfo)
  */
 
 GLOBAL(void)
-jinit_c_master_control (j_compress_ptr cinfo, boolean transcode_only)
+jinit_c_master_control_xp (j_compress_ptr cinfo, boolean transcode_only)
 {
+  j_compress_ptr_xp xinfo = (j_compress_ptr_xp) cinfo->client_data;
   my_master_ptr master;
 
   master = (my_master_ptr)
       (*cinfo->mem->alloc_small) ((j_common_ptr) cinfo, JPOOL_IMAGE,
 				  SIZEOF(my_comp_master));
-  cinfo->master = (struct jpeg_comp_master *) master;
-  master->pub.prepare_for_pass = prepare_for_pass;
-  master->pub.pass_startup = pass_startup;
-  master->pub.finish_pass = finish_pass_master;
+  xinfo->master_xp = (struct jpeg_comp_master_xp *) master;
+  master->pub.prepare_for_pass_xp = prepare_for_pass_xp;
+  master->pub.pass_startup_xp = pass_startup_xp;
+  master->pub.finish_pass_xp = finish_pass_master_xp;
   master->pub.is_last_pass = FALSE;
 
   /* Validate parameters, determine derived values */
-  initial_setup(cinfo);
+  initial_setup_xp(cinfo);
 
   if (cinfo->scan_info != NULL) {
 #ifdef C_MULTISCAN_FILES_SUPPORTED
-    validate_script(cinfo);
+    validate_script_xp(cinfo);
 #else
     ERREXIT(cinfo, JERR_NOT_COMPILED);
 #endif

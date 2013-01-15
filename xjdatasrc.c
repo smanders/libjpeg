@@ -1,5 +1,5 @@
 /*
- * jdatasrc.c
+ * xjdatasrc.c
  *
  * Copyright (C) 1994-1996, Thomas G. Lane.
  * This file is part of the Independent JPEG Group's software.
@@ -16,14 +16,14 @@
 
 /* this is not a core library module, so it doesn't define JPEG_INTERNALS */
 #include "jinclude.h"
-#include "jpeglib.h"
+#include "xjpeglib.h"
 #include "jerror.h"
 
 
 /* Expanded data source object for stdio input */
 
 typedef struct {
-  struct jpeg_source_mgr pub;	/* public fields */
+  struct jpeg_source_mgr_xp pub;	/* public fields */
 
   FILE * infile;		/* source stream */
   JOCTET * buffer;		/* start of buffer */
@@ -43,7 +43,8 @@ typedef my_source_mgr * my_src_ptr;
 METHODDEF(void)
 init_source (j_decompress_ptr cinfo)
 {
-  my_src_ptr src = (my_src_ptr) cinfo->src;
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
+  my_src_ptr src = (my_src_ptr) xinfo->src_xp;
 
   /* We reset the empty-input-file flag for each image,
    * but we don't clear the input buffer.
@@ -89,7 +90,8 @@ init_source (j_decompress_ptr cinfo)
 METHODDEF(boolean)
 fill_input_buffer (j_decompress_ptr cinfo)
 {
-  my_src_ptr src = (my_src_ptr) cinfo->src;
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
+  my_src_ptr src = (my_src_ptr) xinfo->src_xp;
   size_t nbytes;
 
   nbytes = JFREAD(src->infile, src->buffer, INPUT_BUF_SIZE);
@@ -127,7 +129,8 @@ fill_input_buffer (j_decompress_ptr cinfo)
 METHODDEF(void)
 skip_input_data (j_decompress_ptr cinfo, long num_bytes)
 {
-  my_src_ptr src = (my_src_ptr) cinfo->src;
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
+  my_src_ptr src = (my_src_ptr) xinfo->src_xp;
 
   /* Just a dumb implementation for now.  Could use fseek() except
    * it doesn't work on pipes.  Not clear that being smart is worth
@@ -179,8 +182,9 @@ term_source (j_decompress_ptr cinfo)
  */
 
 GLOBAL(void)
-jpeg_stdio_src (j_decompress_ptr cinfo, FILE * infile)
+jpeg_stdio_src_xp (j_decompress_ptr cinfo, FILE * infile)
 {
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
   my_src_ptr src;
 
   /* The source object and input buffer are made permanent so that a series
@@ -190,21 +194,21 @@ jpeg_stdio_src (j_decompress_ptr cinfo, FILE * infile)
    * This makes it unsafe to use this manager and a different source
    * manager serially with the same JPEG object.  Caveat programmer.
    */
-  if (cinfo->src == NULL) {	/* first time for this JPEG object? */
-    cinfo->src = (struct jpeg_source_mgr *)
+  if (xinfo->src_xp == NULL) {	/* first time for this JPEG object? */
+    xinfo->src_xp = (struct jpeg_source_mgr_xp *)
       (*cinfo->mem->alloc_small) ((j_common_ptr) cinfo, JPOOL_PERMANENT,
 				  SIZEOF(my_source_mgr));
-    src = (my_src_ptr) cinfo->src;
+    src = (my_src_ptr) xinfo->src_xp;
     src->buffer = (JOCTET *)
       (*cinfo->mem->alloc_small) ((j_common_ptr) cinfo, JPOOL_PERMANENT,
 				  INPUT_BUF_SIZE * SIZEOF(JOCTET));
   }
 
-  src = (my_src_ptr) cinfo->src;
+  src = (my_src_ptr) xinfo->src_xp;
   src->pub.init_source = init_source;
   src->pub.fill_input_buffer = fill_input_buffer;
   src->pub.skip_input_data = skip_input_data;
-  src->pub.resync_to_restart = jpeg_resync_to_restart; /* use default method */
+  src->pub.resync_to_restart_xp = jpeg_resync_to_restart_xp; /* use default method */
   src->pub.term_source = term_source;
   src->infile = infile;
   src->pub.bytes_in_buffer = 0; /* forces fill_input_buffer on first read */

@@ -1,5 +1,5 @@
 /*
- * jdmerge.c
+ * xjdmerge.c
  *
  * Copyright (C) 1994-1996, Thomas G. Lane.
  * This file is part of the Independent JPEG Group's software.
@@ -34,7 +34,7 @@
 
 #define JPEG_INTERNALS
 #include "jinclude.h"
-#include "jpeglib.h"
+#include "xjpeglib.h"
 
 #ifdef UPSAMPLE_MERGING_SUPPORTED
 
@@ -42,12 +42,12 @@
 /* Private subobject */
 
 typedef struct {
-  struct jpeg_upsampler pub;	/* public fields */
+  struct jpeg_upsampler_xp pub;	/* public fields */
 
   /* Pointer to routine to do actual upsampling/conversion of one row group */
   JMETHOD(void, upmethod, (j_decompress_ptr cinfo,
-			   JSAMPIMAGE input_buf, JDIMENSION in_row_group_ctr,
-			   JSAMPARRAY output_buf));
+			   JSAMPIMAGEXP input_buf, JDIMENSION in_row_group_ctr,
+			   JSAMPARRAYXP output_buf));
 
   /* Private state for YCC->RGB conversion */
   int * Cr_r_tab;		/* => table for Cr to R conversion */
@@ -60,7 +60,7 @@ typedef struct {
    * application provides just a one-row buffer; we also use the spare
    * to discard the dummy last row if the image height is odd.
    */
-  JSAMPROW spare_row;
+  JSAMPROWXP spare_row;
   boolean spare_full;		/* T if spare buffer is occupied */
 
   JDIMENSION out_row_width;	/* samples per output row */
@@ -80,27 +80,30 @@ typedef my_upsampler * my_upsample_ptr;
  */
 
 LOCAL(void)
-build_ycc_rgb_table (j_decompress_ptr cinfo)
+build_ycc_rgb_table_xp (j_decompress_ptr cinfo)
 {
-  my_upsample_ptr upsample = (my_upsample_ptr) cinfo->upsample;
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
+  my_upsample_ptr upsample = (my_upsample_ptr) xinfo->upsample_xp;
+  const JSAMPLEXP MAXJSAMPLEXP = xinfo->max_JSAMPLEXP;
+  const JSAMPLEXP CENTERJSAMPLEXP = xinfo->center_JSAMPLEXP;
   int i;
   INT32 x;
   SHIFT_TEMPS
 
   upsample->Cr_r_tab = (int *)
     (*cinfo->mem->alloc_small) ((j_common_ptr) cinfo, JPOOL_IMAGE,
-				(MAXJSAMPLE+1) * SIZEOF(int));
+				(MAXJSAMPLEXP+1) * SIZEOF(int));
   upsample->Cb_b_tab = (int *)
     (*cinfo->mem->alloc_small) ((j_common_ptr) cinfo, JPOOL_IMAGE,
-				(MAXJSAMPLE+1) * SIZEOF(int));
+				(MAXJSAMPLEXP+1) * SIZEOF(int));
   upsample->Cr_g_tab = (INT32 *)
     (*cinfo->mem->alloc_small) ((j_common_ptr) cinfo, JPOOL_IMAGE,
-				(MAXJSAMPLE+1) * SIZEOF(INT32));
+				(MAXJSAMPLEXP+1) * SIZEOF(INT32));
   upsample->Cb_g_tab = (INT32 *)
     (*cinfo->mem->alloc_small) ((j_common_ptr) cinfo, JPOOL_IMAGE,
-				(MAXJSAMPLE+1) * SIZEOF(INT32));
+				(MAXJSAMPLEXP+1) * SIZEOF(INT32));
 
-  for (i = 0, x = -CENTERJSAMPLE; i <= MAXJSAMPLE; i++, x++) {
+  for (i = 0, x = -CENTERJSAMPLEXP; i <= MAXJSAMPLEXP; i++, x++) {
     /* i is the actual input pixel value, in the range 0..MAXJSAMPLE */
     /* The Cb or Cr value we are thinking of is x = i - CENTERJSAMPLE */
     /* Cr=>R value is nearest int to 1.40200 * x */
@@ -123,9 +126,10 @@ build_ycc_rgb_table (j_decompress_ptr cinfo)
  */
 
 METHODDEF(void)
-start_pass_merged_upsample (j_decompress_ptr cinfo)
+start_pass_merged_upsample_xp (j_decompress_ptr cinfo)
 {
-  my_upsample_ptr upsample = (my_upsample_ptr) cinfo->upsample;
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
+  my_upsample_ptr upsample = (my_upsample_ptr) xinfo->upsample_xp;
 
   /* Mark the spare buffer empty */
   upsample->spare_full = FALSE;
@@ -141,20 +145,21 @@ start_pass_merged_upsample (j_decompress_ptr cinfo)
  */
 
 METHODDEF(void)
-merged_2v_upsample (j_decompress_ptr cinfo,
-		    JSAMPIMAGE input_buf, JDIMENSION *in_row_group_ctr,
+merged_2v_upsample_xp (j_decompress_ptr cinfo,
+		    JSAMPIMAGEXP input_buf, JDIMENSION *in_row_group_ctr,
 		    JDIMENSION in_row_groups_avail,
-		    JSAMPARRAY output_buf, JDIMENSION *out_row_ctr,
+		    JSAMPARRAYXP output_buf, JDIMENSION *out_row_ctr,
 		    JDIMENSION out_rows_avail)
 /* 2:1 vertical sampling case: may need a spare row. */
 {
-  my_upsample_ptr upsample = (my_upsample_ptr) cinfo->upsample;
-  JSAMPROW work_ptrs[2];
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
+  my_upsample_ptr upsample = (my_upsample_ptr) xinfo->upsample_xp;
+  JSAMPROWXP work_ptrs[2];
   JDIMENSION num_rows;		/* number of rows returned to caller */
 
   if (upsample->spare_full) {
     /* If we have a spare row saved from a previous cycle, just return it. */
-    jcopy_sample_rows(& upsample->spare_row, 0, output_buf + *out_row_ctr, 0,
+    jcopy_sample_rows_xp(& upsample->spare_row, 0, output_buf + *out_row_ctr, 0,
 		      1, upsample->out_row_width);
     num_rows = 1;
     upsample->spare_full = FALSE;
@@ -190,14 +195,15 @@ merged_2v_upsample (j_decompress_ptr cinfo,
 
 
 METHODDEF(void)
-merged_1v_upsample (j_decompress_ptr cinfo,
-		    JSAMPIMAGE input_buf, JDIMENSION *in_row_group_ctr,
+merged_1v_upsample_xp (j_decompress_ptr cinfo,
+		    JSAMPIMAGEXP input_buf, JDIMENSION *in_row_group_ctr,
 		    JDIMENSION in_row_groups_avail,
-		    JSAMPARRAY output_buf, JDIMENSION *out_row_ctr,
+		    JSAMPARRAYXP output_buf, JDIMENSION *out_row_ctr,
 		    JDIMENSION out_rows_avail)
 /* 1:1 vertical sampling case: much easier, never need a spare row. */
 {
-  my_upsample_ptr upsample = (my_upsample_ptr) cinfo->upsample;
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
+  my_upsample_ptr upsample = (my_upsample_ptr) xinfo->upsample_xp;
 
   /* Just do the upsampling. */
   (*upsample->upmethod) (cinfo, input_buf, *in_row_group_ctr,
@@ -223,18 +229,19 @@ merged_1v_upsample (j_decompress_ptr cinfo,
  */
 
 METHODDEF(void)
-h2v1_merged_upsample (j_decompress_ptr cinfo,
-		      JSAMPIMAGE input_buf, JDIMENSION in_row_group_ctr,
-		      JSAMPARRAY output_buf)
+h2v1_merged_upsample_xp (j_decompress_ptr cinfo,
+		      JSAMPIMAGEXP input_buf, JDIMENSION in_row_group_ctr,
+		      JSAMPARRAYXP output_buf)
 {
-  my_upsample_ptr upsample = (my_upsample_ptr) cinfo->upsample;
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
+  my_upsample_ptr upsample = (my_upsample_ptr) xinfo->upsample_xp;
   register int y, cred, cgreen, cblue;
   int cb, cr;
-  register JSAMPROW outptr;
-  JSAMPROW inptr0, inptr1, inptr2;
+  register JSAMPROWXP outptr;
+  JSAMPROWXP inptr0, inptr1, inptr2;
   JDIMENSION col;
   /* copy these pointers into registers if possible */
-  register JSAMPLE * range_limit = cinfo->sample_range_limit;
+  register JSAMPLEXP * range_limit = xinfo->sample_range_limit_xp;
   int * Crrtab = upsample->Cr_r_tab;
   int * Cbbtab = upsample->Cb_b_tab;
   INT32 * Crgtab = upsample->Cr_g_tab;
@@ -285,18 +292,19 @@ h2v1_merged_upsample (j_decompress_ptr cinfo,
  */
 
 METHODDEF(void)
-h2v2_merged_upsample (j_decompress_ptr cinfo,
-		      JSAMPIMAGE input_buf, JDIMENSION in_row_group_ctr,
-		      JSAMPARRAY output_buf)
+h2v2_merged_upsample_xp (j_decompress_ptr cinfo,
+		      JSAMPIMAGEXP input_buf, JDIMENSION in_row_group_ctr,
+		      JSAMPARRAYXP output_buf)
 {
-  my_upsample_ptr upsample = (my_upsample_ptr) cinfo->upsample;
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
+  my_upsample_ptr upsample = (my_upsample_ptr) xinfo->upsample_xp;
   register int y, cred, cgreen, cblue;
   int cb, cr;
-  register JSAMPROW outptr0, outptr1;
-  JSAMPROW inptr00, inptr01, inptr1, inptr2;
+  register JSAMPROWXP outptr0, outptr1;
+  JSAMPROWXP inptr00, inptr01, inptr1, inptr2;
   JDIMENSION col;
   /* copy these pointers into registers if possible */
-  register JSAMPLE * range_limit = cinfo->sample_range_limit;
+  register JSAMPLEXP * range_limit = xinfo->sample_range_limit_xp;
   int * Crrtab = upsample->Cr_r_tab;
   int * Cbbtab = upsample->Cb_b_tab;
   INT32 * Crgtab = upsample->Cr_g_tab;
@@ -367,34 +375,35 @@ h2v2_merged_upsample (j_decompress_ptr cinfo,
  */
 
 GLOBAL(void)
-jinit_merged_upsampler (j_decompress_ptr cinfo)
+jinit_merged_upsampler_xp (j_decompress_ptr cinfo)
 {
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
   my_upsample_ptr upsample;
 
   upsample = (my_upsample_ptr)
     (*cinfo->mem->alloc_small) ((j_common_ptr) cinfo, JPOOL_IMAGE,
 				SIZEOF(my_upsampler));
-  cinfo->upsample = (struct jpeg_upsampler *) upsample;
-  upsample->pub.start_pass = start_pass_merged_upsample;
+  xinfo->upsample_xp = (struct jpeg_upsampler_xp *) upsample;
+  upsample->pub.start_pass_xp = start_pass_merged_upsample_xp;
   upsample->pub.need_context_rows = FALSE;
 
   upsample->out_row_width = cinfo->output_width * cinfo->out_color_components;
 
   if (cinfo->max_v_samp_factor == 2) {
-    upsample->pub.upsample = merged_2v_upsample;
-    upsample->upmethod = h2v2_merged_upsample;
+    upsample->pub.upsample_xp = merged_2v_upsample_xp;
+    upsample->upmethod = h2v2_merged_upsample_xp;
     /* Allocate a spare row buffer */
-    upsample->spare_row = (JSAMPROW)
+    upsample->spare_row = (JSAMPROWXP)
       (*cinfo->mem->alloc_large) ((j_common_ptr) cinfo, JPOOL_IMAGE,
-		(size_t) (upsample->out_row_width * SIZEOF(JSAMPLE)));
+		(size_t) (upsample->out_row_width * SIZEOF(JSAMPLEXP)));
   } else {
-    upsample->pub.upsample = merged_1v_upsample;
-    upsample->upmethod = h2v1_merged_upsample;
+    upsample->pub.upsample_xp = merged_1v_upsample_xp;
+    upsample->upmethod = h2v1_merged_upsample_xp;
     /* No spare row needed */
     upsample->spare_row = NULL;
   }
 
-  build_ycc_rgb_table(cinfo);
+  build_ycc_rgb_table_xp(cinfo);
 }
 
 #endif /* UPSAMPLE_MERGING_SUPPORTED */

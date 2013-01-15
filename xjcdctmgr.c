@@ -1,5 +1,5 @@
 /*
- * jcdctmgr.c
+ * xjcdctmgr.c
  *
  * Copyright (C) 1994-1996, Thomas G. Lane.
  * This file is part of the Independent JPEG Group's software.
@@ -13,14 +13,14 @@
 
 #define JPEG_INTERNALS
 #include "jinclude.h"
-#include "jpeglib.h"
-#include "jdct.h"		/* Private declarations for DCT subsystem */
+#include "xjpeglib.h"
+#include "xjdct.h"		/* Private declarations for DCT subsystem */
 
 
 /* Private subobject for this module */
 
 typedef struct {
-  struct jpeg_forward_dct pub;	/* public fields */
+  struct jpeg_forward_dct_xp pub;	/* public fields */
 
   /* Pointer to the DCT routine actually in use */
   forward_DCT_method_ptr do_dct;
@@ -51,9 +51,10 @@ typedef my_fdct_controller * my_fdct_ptr;
  */
 
 METHODDEF(void)
-start_pass_fdctmgr (j_compress_ptr cinfo)
+start_pass_fdctmgr_xp (j_compress_ptr cinfo)
 {
-  my_fdct_ptr fdct = (my_fdct_ptr) cinfo->fdct;
+  j_compress_ptr_xp xinfo = (j_compress_ptr_xp) cinfo->client_data;
+  my_fdct_ptr fdct = (my_fdct_ptr) xinfo->fdct_xp;
   int ci, qtblno, i;
   jpeg_component_info *compptr;
   JQUANT_TBL * qtbl;
@@ -177,14 +178,15 @@ start_pass_fdctmgr (j_compress_ptr cinfo)
  */
 
 METHODDEF(void)
-forward_DCT (j_compress_ptr cinfo, jpeg_component_info * compptr,
-	     JSAMPARRAY sample_data, JBLOCKROW coef_blocks,
-	     JDIMENSION start_row, JDIMENSION start_col,
-	     JDIMENSION num_blocks)
+forward_DCT_xp (j_compress_ptr cinfo, jpeg_component_info * compptr,
+                   JSAMPARRAYXP sample_data, JBLOCKROW coef_blocks,
+                   JDIMENSION start_row, JDIMENSION start_col,
+                   JDIMENSION num_blocks)
 /* This version is used for integer DCT implementations. */
 {
+  j_compress_ptr_xp xinfo = (j_compress_ptr_xp) cinfo->client_data;
   /* This routine is heavily used, so it's worth coding it tightly. */
-  my_fdct_ptr fdct = (my_fdct_ptr) cinfo->fdct;
+  my_fdct_ptr fdct = (my_fdct_ptr) xinfo->fdct_xp;
   forward_DCT_method_ptr do_dct = fdct->do_dct;
   DCTELEM * divisors = fdct->divisors[compptr->quant_tbl_no];
   DCTELEM workspace[DCTSIZE2];	/* work area for FDCT subroutine */
@@ -195,25 +197,25 @@ forward_DCT (j_compress_ptr cinfo, jpeg_component_info * compptr,
   for (bi = 0; bi < num_blocks; bi++, start_col += DCTSIZE) {
     /* Load data into workspace, applying unsigned->signed conversion */
     { register DCTELEM *workspaceptr;
-      register JSAMPROW elemptr;
+      register JSAMPROWXP elemptr;
       register int elemr;
 
       workspaceptr = workspace;
       for (elemr = 0; elemr < DCTSIZE; elemr++) {
 	elemptr = sample_data[elemr] + start_col;
 #if DCTSIZE == 8		/* unroll the inner loop */
-	*workspaceptr++ = GETJSAMPLE(*elemptr++) - CENTERJSAMPLE;
-	*workspaceptr++ = GETJSAMPLE(*elemptr++) - CENTERJSAMPLE;
-	*workspaceptr++ = GETJSAMPLE(*elemptr++) - CENTERJSAMPLE;
-	*workspaceptr++ = GETJSAMPLE(*elemptr++) - CENTERJSAMPLE;
-	*workspaceptr++ = GETJSAMPLE(*elemptr++) - CENTERJSAMPLE;
-	*workspaceptr++ = GETJSAMPLE(*elemptr++) - CENTERJSAMPLE;
-	*workspaceptr++ = GETJSAMPLE(*elemptr++) - CENTERJSAMPLE;
-	*workspaceptr++ = GETJSAMPLE(*elemptr++) - CENTERJSAMPLE;
+	*workspaceptr++ = GETJSAMPLE(*elemptr++) - CENTERJSAMPLE12;
+	*workspaceptr++ = GETJSAMPLE(*elemptr++) - CENTERJSAMPLE12;
+	*workspaceptr++ = GETJSAMPLE(*elemptr++) - CENTERJSAMPLE12;
+	*workspaceptr++ = GETJSAMPLE(*elemptr++) - CENTERJSAMPLE12;
+	*workspaceptr++ = GETJSAMPLE(*elemptr++) - CENTERJSAMPLE12;
+	*workspaceptr++ = GETJSAMPLE(*elemptr++) - CENTERJSAMPLE12;
+	*workspaceptr++ = GETJSAMPLE(*elemptr++) - CENTERJSAMPLE12;
+	*workspaceptr++ = GETJSAMPLE(*elemptr++) - CENTERJSAMPLE12;
 #else
 	{ register int elemc;
 	  for (elemc = DCTSIZE; elemc > 0; elemc--) {
-	    *workspaceptr++ = GETJSAMPLE(*elemptr++) - CENTERJSAMPLE;
+	    *workspaceptr++ = GETJSAMPLE(*elemptr++) - CENTERJSAMPLE12;
 	  }
 	}
 #endif
@@ -267,14 +269,15 @@ forward_DCT (j_compress_ptr cinfo, jpeg_component_info * compptr,
 #ifdef DCT_FLOAT_SUPPORTED
 
 METHODDEF(void)
-forward_DCT_float (j_compress_ptr cinfo, jpeg_component_info * compptr,
-		   JSAMPARRAY sample_data, JBLOCKROW coef_blocks,
+forward_DCT_float_xp (j_compress_ptr cinfo, jpeg_component_info * compptr,
+		   JSAMPARRAYXP sample_data, JBLOCKROW coef_blocks,
 		   JDIMENSION start_row, JDIMENSION start_col,
 		   JDIMENSION num_blocks)
 /* This version is used for floating-point DCT implementations. */
 {
+  j_compress_ptr_xp xinfo = (j_compress_ptr_xp) cinfo->client_data;
   /* This routine is heavily used, so it's worth coding it tightly. */
-  my_fdct_ptr fdct = (my_fdct_ptr) cinfo->fdct;
+  my_fdct_ptr fdct = (my_fdct_ptr) xinfo->fdct_xp;
   float_DCT_method_ptr do_dct = fdct->do_float_dct;
   FAST_FLOAT * divisors = fdct->float_divisors[compptr->quant_tbl_no];
   FAST_FLOAT workspace[DCTSIZE2]; /* work area for FDCT subroutine */
@@ -285,26 +288,26 @@ forward_DCT_float (j_compress_ptr cinfo, jpeg_component_info * compptr,
   for (bi = 0; bi < num_blocks; bi++, start_col += DCTSIZE) {
     /* Load data into workspace, applying unsigned->signed conversion */
     { register FAST_FLOAT *workspaceptr;
-      register JSAMPROW elemptr;
+      register JSAMPROWXP elemptr;
       register int elemr;
 
       workspaceptr = workspace;
       for (elemr = 0; elemr < DCTSIZE; elemr++) {
 	elemptr = sample_data[elemr] + start_col;
 #if DCTSIZE == 8		/* unroll the inner loop */
-	*workspaceptr++ = (FAST_FLOAT)(GETJSAMPLE(*elemptr++) - CENTERJSAMPLE);
-	*workspaceptr++ = (FAST_FLOAT)(GETJSAMPLE(*elemptr++) - CENTERJSAMPLE);
-	*workspaceptr++ = (FAST_FLOAT)(GETJSAMPLE(*elemptr++) - CENTERJSAMPLE);
-	*workspaceptr++ = (FAST_FLOAT)(GETJSAMPLE(*elemptr++) - CENTERJSAMPLE);
-	*workspaceptr++ = (FAST_FLOAT)(GETJSAMPLE(*elemptr++) - CENTERJSAMPLE);
-	*workspaceptr++ = (FAST_FLOAT)(GETJSAMPLE(*elemptr++) - CENTERJSAMPLE);
-	*workspaceptr++ = (FAST_FLOAT)(GETJSAMPLE(*elemptr++) - CENTERJSAMPLE);
-	*workspaceptr++ = (FAST_FLOAT)(GETJSAMPLE(*elemptr++) - CENTERJSAMPLE);
+	*workspaceptr++ = (FAST_FLOAT)(GETJSAMPLE(*elemptr++) - CENTERJSAMPLE12);
+	*workspaceptr++ = (FAST_FLOAT)(GETJSAMPLE(*elemptr++) - CENTERJSAMPLE12);
+	*workspaceptr++ = (FAST_FLOAT)(GETJSAMPLE(*elemptr++) - CENTERJSAMPLE12);
+	*workspaceptr++ = (FAST_FLOAT)(GETJSAMPLE(*elemptr++) - CENTERJSAMPLE12);
+	*workspaceptr++ = (FAST_FLOAT)(GETJSAMPLE(*elemptr++) - CENTERJSAMPLE12);
+	*workspaceptr++ = (FAST_FLOAT)(GETJSAMPLE(*elemptr++) - CENTERJSAMPLE12);
+	*workspaceptr++ = (FAST_FLOAT)(GETJSAMPLE(*elemptr++) - CENTERJSAMPLE12);
+	*workspaceptr++ = (FAST_FLOAT)(GETJSAMPLE(*elemptr++) - CENTERJSAMPLE12);
 #else
 	{ register int elemc;
 	  for (elemc = DCTSIZE; elemc > 0; elemc--) {
 	    *workspaceptr++ = (FAST_FLOAT)
-	      (GETJSAMPLE(*elemptr++) - CENTERJSAMPLE);
+	      (GETJSAMPLE(*elemptr++) - CENTERJSAMPLE12);
 	  }
 	}
 #endif
@@ -342,34 +345,35 @@ forward_DCT_float (j_compress_ptr cinfo, jpeg_component_info * compptr,
  */
 
 GLOBAL(void)
-jinit_forward_dct (j_compress_ptr cinfo)
+jinit_forward_dct_xp (j_compress_ptr cinfo)
 {
+  j_compress_ptr_xp xinfo = (j_compress_ptr_xp) cinfo->client_data;
   my_fdct_ptr fdct;
   int i;
 
   fdct = (my_fdct_ptr)
     (*cinfo->mem->alloc_small) ((j_common_ptr) cinfo, JPOOL_IMAGE,
 				SIZEOF(my_fdct_controller));
-  cinfo->fdct = (struct jpeg_forward_dct *) fdct;
-  fdct->pub.start_pass = start_pass_fdctmgr;
+  xinfo->fdct_xp = (struct jpeg_forward_dct_xp *) fdct;
+  fdct->pub.start_pass_xp = start_pass_fdctmgr_xp;
 
   switch (cinfo->dct_method) {
 #ifdef DCT_ISLOW_SUPPORTED
   case JDCT_ISLOW:
-    fdct->pub.forward_DCT = forward_DCT;
-    fdct->do_dct = jpeg_fdct_islow;
+    fdct->pub.forward_DCT_xp = forward_DCT_xp;
+    fdct->do_dct = jpeg_fdct_islow_xp;
     break;
 #endif
 #ifdef DCT_IFAST_SUPPORTED
   case JDCT_IFAST:
-    fdct->pub.forward_DCT = forward_DCT;
-    fdct->do_dct = jpeg_fdct_ifast;
+    fdct->pub.forward_DCT_xp = forward_DCT_xp;
+    fdct->do_dct = jpeg_fdct_ifast_xp;
     break;
 #endif
 #ifdef DCT_FLOAT_SUPPORTED
   case JDCT_FLOAT:
-    fdct->pub.forward_DCT = forward_DCT_float;
-    fdct->do_float_dct = jpeg_fdct_float;
+    fdct->pub.forward_DCT_xp = forward_DCT_float_xp;
+    fdct->do_float_dct = jpeg_fdct_float_xp;
     break;
 #endif
   default:

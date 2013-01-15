@@ -1,5 +1,5 @@
 /*
- * jidctint.c
+ * xjidctint.c
  *
  * Copyright (C) 1991-1998, Thomas G. Lane.
  * This file is part of the Independent JPEG Group's software.
@@ -27,8 +27,8 @@
 
 #define JPEG_INTERNALS
 #include "jinclude.h"
-#include "jpeglib.h"
-#include "jdct.h"		/* Private declarations for DCT subsystem */
+#include "xjpeglib.h"
+#include "xjdct.h"		/* Private declarations for DCT subsystem */
 
 #ifdef DCT_ISLOW_SUPPORTED
 
@@ -74,7 +74,7 @@
  * shows that the values given below are the most effective.
  */
 
-#if BITS_IN_JSAMPLE == 8
+#if BITS_IN_JSAMPLE12 == 8
 #define CONST_BITS  13
 #define PASS1_BITS  2
 #else
@@ -125,7 +125,7 @@
  * For 12-bit samples, a full 32-bit multiplication will be needed.
  */
 
-#if BITS_IN_JSAMPLE == 8
+#if BITS_IN_JSAMPLE12 == 8
 #define MULTIPLY(var,const)  MULTIPLY16C16(var,const)
 #else
 #define MULTIPLY(var,const)  ((var) * (const))
@@ -145,18 +145,19 @@
  */
 
 GLOBAL(void)
-jpeg_idct_islow (j_decompress_ptr cinfo, jpeg_component_info * compptr,
+jpeg_idct_islow_xp (j_decompress_ptr cinfo, jpeg_component_info * compptr,
 		 JCOEFPTR coef_block,
-		 JSAMPARRAY output_buf, JDIMENSION output_col)
+		 JSAMPARRAYXP output_buf, JDIMENSION output_col)
 {
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
   INT32 tmp0, tmp1, tmp2, tmp3;
   INT32 tmp10, tmp11, tmp12, tmp13;
   INT32 z1, z2, z3, z4, z5;
   JCOEFPTR inptr;
   ISLOW_MULT_TYPE * quantptr;
   int * wsptr;
-  JSAMPROW outptr;
-  JSAMPLE *range_limit = IDCT_range_limit(cinfo);
+  JSAMPROWXP outptr;
+  JSAMPLEXP *range_limit = IDCT_range_limit(xinfo);
   int ctr;
   int workspace[DCTSIZE2];	/* buffers data between passes */
   SHIFT_TEMPS
@@ -288,7 +289,7 @@ jpeg_idct_islow (j_decompress_ptr cinfo, jpeg_component_info * compptr,
     if (wsptr[1] == 0 && wsptr[2] == 0 && wsptr[3] == 0 && wsptr[4] == 0 &&
 	wsptr[5] == 0 && wsptr[6] == 0 && wsptr[7] == 0) {
       /* AC terms all zero */
-      JSAMPLE dcval = range_limit[(int) DESCALE((INT32) wsptr[0], PASS1_BITS+3)
+      JSAMPLEXP dcval = range_limit[(int) DESCALE((INT32) wsptr[0], PASS1_BITS+3)
 				  & RANGE_MASK];
       
       outptr[0] = dcval;

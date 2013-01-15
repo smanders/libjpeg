@@ -1,5 +1,5 @@
 /*
- * jdhuff.c
+ * xjdhuff.c
  *
  * Copyright (C) 1991-1997, Thomas G. Lane.
  * This file is part of the Independent JPEG Group's software.
@@ -16,8 +16,8 @@
 
 #define JPEG_INTERNALS
 #include "jinclude.h"
-#include "jpeglib.h"
-#include "jdhuff.h"		/* Declarations shared with jdphuff.c */
+#include "xjpeglib.h"
+#include "xjdhuff.h"		/* Declarations shared with jdphuff.c */
 
 
 /*
@@ -50,7 +50,7 @@ typedef struct {
 
 
 typedef struct {
-  struct jpeg_entropy_decoder pub; /* public fields */
+  struct jpeg_entropy_decoder_xp pub; /* public fields */
 
   /* These fields are loaded into local variables at start of each MCU.
    * In case of suspension, we exit WITHOUT updating them.
@@ -83,9 +83,10 @@ typedef huff_entropy_decoder * huff_entropy_ptr;
  */
 
 METHODDEF(void)
-start_pass_huff_decoder (j_decompress_ptr cinfo)
+start_pass_huff_decoder_xp (j_decompress_ptr cinfo)
 {
-  huff_entropy_ptr entropy = (huff_entropy_ptr) cinfo->entropy;
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
+  huff_entropy_ptr entropy = (huff_entropy_ptr) xinfo->entropy_xp;
   int ci, blkn, dctbl, actbl;
   jpeg_component_info * compptr;
 
@@ -103,9 +104,9 @@ start_pass_huff_decoder (j_decompress_ptr cinfo)
     actbl = compptr->ac_tbl_no;
     /* Compute derived values for Huffman tables */
     /* We may do this more than once for a table, but it's not expensive */
-    jpeg_make_d_derived_tbl(cinfo, TRUE, dctbl,
+    jpeg_make_d_derived_tbl_xp(cinfo, TRUE, dctbl,
 			    & entropy->dc_derived_tbls[dctbl]);
-    jpeg_make_d_derived_tbl(cinfo, FALSE, actbl,
+    jpeg_make_d_derived_tbl_xp(cinfo, FALSE, actbl,
 			    & entropy->ac_derived_tbls[actbl]);
     /* Initialize DC predictions to 0 */
     entropy->saved.last_dc_val[ci] = 0;
@@ -146,7 +147,7 @@ start_pass_huff_decoder (j_decompress_ptr cinfo)
  */
 
 GLOBAL(void)
-jpeg_make_d_derived_tbl (j_decompress_ptr cinfo, boolean isDC, int tblno,
+jpeg_make_d_derived_tbl_xp (j_decompress_ptr cinfo, boolean isDC, int tblno,
 			 d_derived_tbl ** pdtbl)
 {
   JHUFF_TBL *htbl;
@@ -289,7 +290,7 @@ jpeg_make_d_derived_tbl (j_decompress_ptr cinfo, boolean isDC, int tblno,
 
 
 GLOBAL(boolean)
-jpeg_fill_bit_buffer (bitread_working_state * state,
+jpeg_fill_bit_buffer_xp (bitread_working_state_xp * state,
 		      register bit_buf_type get_buffer, register int bits_left,
 		      int nbits)
 /* Load up the bit buffer to a depth of at least nbits */
@@ -298,6 +299,7 @@ jpeg_fill_bit_buffer (bitread_working_state * state,
   register const JOCTET * next_input_byte = state->next_input_byte;
   register size_t bytes_in_buffer = state->bytes_in_buffer;
   j_decompress_ptr cinfo = state->cinfo;
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
 
   /* Attempt to load at least MIN_GET_BITS bits into get_buffer. */
   /* (It is assumed that no request will be for more than that many bits.) */
@@ -309,10 +311,10 @@ jpeg_fill_bit_buffer (bitread_working_state * state,
 
       /* Attempt to read a byte */
       if (bytes_in_buffer == 0) {
-	if (! (*cinfo->src->fill_input_buffer) (cinfo))
+	if (! (*xinfo->src_xp->fill_input_buffer) (cinfo))
 	  return FALSE;
-	next_input_byte = cinfo->src->next_input_byte;
-	bytes_in_buffer = cinfo->src->bytes_in_buffer;
+	next_input_byte = xinfo->src_xp->next_input_byte;
+	bytes_in_buffer = xinfo->src_xp->bytes_in_buffer;
       }
       bytes_in_buffer--;
       c = GETJOCTET(*next_input_byte++);
@@ -326,10 +328,10 @@ jpeg_fill_bit_buffer (bitread_working_state * state,
 	 */
 	do {
 	  if (bytes_in_buffer == 0) {
-	    if (! (*cinfo->src->fill_input_buffer) (cinfo))
+	    if (! (*xinfo->src_xp->fill_input_buffer) (cinfo))
 	      return FALSE;
-	    next_input_byte = cinfo->src->next_input_byte;
-	    bytes_in_buffer = cinfo->src->bytes_in_buffer;
+	    next_input_byte = xinfo->src_xp->next_input_byte;
+	    bytes_in_buffer = xinfo->src_xp->bytes_in_buffer;
 	  }
 	  bytes_in_buffer--;
 	  c = GETJOCTET(*next_input_byte++);
@@ -369,9 +371,9 @@ jpeg_fill_bit_buffer (bitread_working_state * state,
        * We use a nonvolatile flag to ensure that only one warning message
        * appears per data segment.
        */
-      if (! cinfo->entropy->insufficient_data) {
+      if (! xinfo->entropy_xp->insufficient_data) {
 	WARNMS(cinfo, JWRN_HIT_MARKER);
-	cinfo->entropy->insufficient_data = TRUE;
+	xinfo->entropy_xp->insufficient_data = TRUE;
       }
       /* Fill the buffer with zero bits */
       get_buffer <<= MIN_GET_BITS - bits_left;
@@ -395,7 +397,7 @@ jpeg_fill_bit_buffer (bitread_working_state * state,
  */
 
 GLOBAL(int)
-jpeg_huff_decode (bitread_working_state * state,
+jpeg_huff_decode_xp (bitread_working_state_xp * state,
 		  register bit_buf_type get_buffer, register int bits_left,
 		  d_derived_tbl * htbl, int min_bits)
 {
@@ -465,18 +467,19 @@ static const int extend_offset[16] = /* entry n is (-1 << n) + 1 */
  */
 
 LOCAL(boolean)
-process_restart (j_decompress_ptr cinfo)
+process_restart_xp (j_decompress_ptr cinfo)
 {
-  huff_entropy_ptr entropy = (huff_entropy_ptr) cinfo->entropy;
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
+  huff_entropy_ptr entropy = (huff_entropy_ptr) xinfo->entropy_xp;
   int ci;
 
   /* Throw away any unused bits remaining in bit buffer; */
   /* include any full bytes in next_marker's count of discarded bytes */
-  cinfo->marker->discarded_bytes += entropy->bitstate.bits_left / 8;
+  xinfo->marker_xp->discarded_bytes += entropy->bitstate.bits_left / 8;
   entropy->bitstate.bits_left = 0;
 
   /* Advance past the RSTn marker */
-  if (! (*cinfo->marker->read_restart_marker) (cinfo))
+  if (! (*xinfo->marker_xp->read_restart_marker) (cinfo))
     return FALSE;
 
   /* Re-initialize DC predictions to 0 */
@@ -514,9 +517,10 @@ process_restart (j_decompress_ptr cinfo)
  */
 
 METHODDEF(boolean)
-decode_mcu (j_decompress_ptr cinfo, JBLOCKROW *MCU_data)
+decode_mcu_xp (j_decompress_ptr cinfo, JBLOCKROW *MCU_data)
 {
-  huff_entropy_ptr entropy = (huff_entropy_ptr) cinfo->entropy;
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
+  huff_entropy_ptr entropy = (huff_entropy_ptr) xinfo->entropy_xp;
   int blkn;
   BITREAD_STATE_VARS;
   savable_state state;
@@ -524,7 +528,7 @@ decode_mcu (j_decompress_ptr cinfo, JBLOCKROW *MCU_data)
   /* Process restart marker if needed; may have to suspend */
   if (cinfo->restart_interval) {
     if (entropy->restarts_to_go == 0)
-      if (! process_restart(cinfo))
+      if (! process_restart_xp(cinfo))
 	return FALSE;
   }
 
@@ -548,7 +552,7 @@ decode_mcu (j_decompress_ptr cinfo, JBLOCKROW *MCU_data)
       /* Decode a single block's worth of coefficients */
 
       /* Section F.2.2.1: decode the DC coefficient difference */
-      HUFF_DECODE(s, br_state, dctbl, return FALSE, label1);
+      HUFF_DECODE_XP(s, br_state, dctbl, return FALSE, label1);
       if (s) {
 	CHECK_BIT_BUFFER(br_state, s, return FALSE);
 	r = GET_BITS(s);
@@ -569,7 +573,7 @@ decode_mcu (j_decompress_ptr cinfo, JBLOCKROW *MCU_data)
 	/* Section F.2.2.2: decode the AC coefficients */
 	/* Since zeroes are skipped, output area must be cleared beforehand */
 	for (k = 1; k < DCTSIZE2; k++) {
-	  HUFF_DECODE(s, br_state, actbl, return FALSE, label2);
+	  HUFF_DECODE_XP(s, br_state, actbl, return FALSE, label2);
       
 	  r = s >> 4;
 	  s &= 15;
@@ -596,7 +600,7 @@ decode_mcu (j_decompress_ptr cinfo, JBLOCKROW *MCU_data)
 	/* Section F.2.2.2: decode the AC coefficients */
 	/* In this path we just discard the values */
 	for (k = 1; k < DCTSIZE2; k++) {
-	  HUFF_DECODE(s, br_state, actbl, return FALSE, label3);
+	  HUFF_DECODE_XP(s, br_state, actbl, return FALSE, label3);
       
 	  r = s >> 4;
 	  s &= 15;
@@ -632,17 +636,18 @@ decode_mcu (j_decompress_ptr cinfo, JBLOCKROW *MCU_data)
  */
 
 GLOBAL(void)
-jinit_huff_decoder (j_decompress_ptr cinfo)
+jinit_huff_decoder_xp (j_decompress_ptr cinfo)
 {
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
   huff_entropy_ptr entropy;
   int i;
 
   entropy = (huff_entropy_ptr)
     (*cinfo->mem->alloc_small) ((j_common_ptr) cinfo, JPOOL_IMAGE,
 				SIZEOF(huff_entropy_decoder));
-  cinfo->entropy = (struct jpeg_entropy_decoder *) entropy;
-  entropy->pub.start_pass = start_pass_huff_decoder;
-  entropy->pub.decode_mcu = decode_mcu;
+  xinfo->entropy_xp = (struct jpeg_entropy_decoder_xp *) entropy;
+  entropy->pub.start_pass_xp = start_pass_huff_decoder_xp;
+  entropy->pub.decode_mcu_xp = decode_mcu_xp;
 
   /* Mark tables unallocated */
   for (i = 0; i < NUM_HUFF_TBLS; i++) {

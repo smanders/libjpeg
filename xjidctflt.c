@@ -1,5 +1,5 @@
 /*
- * jidctflt.c
+ * xjidctflt.c
  *
  * Copyright (C) 1994-1998, Thomas G. Lane.
  * This file is part of the Independent JPEG Group's software.
@@ -38,8 +38,8 @@
 
 #define JPEG_INTERNALS
 #include "jinclude.h"
-#include "jpeglib.h"
-#include "jdct.h"		/* Private declarations for DCT subsystem */
+#include "xjpeglib.h"
+#include "xjdct.h"		/* Private declarations for DCT subsystem */
 
 #ifdef DCT_FLOAT_SUPPORTED
 
@@ -65,18 +65,19 @@
  */
 
 GLOBAL(void)
-jpeg_idct_float (j_decompress_ptr cinfo, jpeg_component_info * compptr,
+jpeg_idct_float_xp (j_decompress_ptr cinfo, jpeg_component_info * compptr,
 		 JCOEFPTR coef_block,
-		 JSAMPARRAY output_buf, JDIMENSION output_col)
+		 JSAMPARRAYXP output_buf, JDIMENSION output_col)
 {
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
   FAST_FLOAT tmp0, tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7;
   FAST_FLOAT tmp10, tmp11, tmp12, tmp13;
   FAST_FLOAT z5, z10, z11, z12, z13;
   JCOEFPTR inptr;
   FLOAT_MULT_TYPE * quantptr;
   FAST_FLOAT * wsptr;
-  JSAMPROW outptr;
-  JSAMPLE *range_limit = IDCT_range_limit(cinfo);
+  JSAMPROWXP outptr;
+  JSAMPLEXP *range_limit = IDCT_range_limit(xinfo);
   int ctr;
   FAST_FLOAT workspace[DCTSIZE2]; /* buffers data between passes */
   SHIFT_TEMPS

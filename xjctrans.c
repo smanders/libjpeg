@@ -1,5 +1,5 @@
 /*
- * jctrans.c
+ * xjctrans.c
  *
  * Copyright (C) 1995-1998, Thomas G. Lane.
  * This file is part of the Independent JPEG Group's software.
@@ -12,13 +12,13 @@
 
 #define JPEG_INTERNALS
 #include "jinclude.h"
-#include "jpeglib.h"
+#include "xjpeglib.h"
 
 
 /* Forward declarations */
-LOCAL(void) transencode_master_selection
+LOCAL(void) transencode_master_selection_xp
 	JPP((j_compress_ptr cinfo, jvirt_barray_ptr * coef_arrays));
-LOCAL(void) transencode_coef_controller
+LOCAL(void) transencode_coef_controller_xp
 	JPP((j_compress_ptr cinfo, jvirt_barray_ptr * coef_arrays));
 
 
@@ -35,17 +35,18 @@ LOCAL(void) transencode_coef_controller
  */
 
 GLOBAL(void)
-jpeg_write_coefficients (j_compress_ptr cinfo, jvirt_barray_ptr * coef_arrays)
+jpeg_write_coefficients_xp (j_compress_ptr cinfo, jvirt_barray_ptr * coef_arrays)
 {
+  j_compress_ptr_xp xinfo = (j_compress_ptr_xp) cinfo->client_data;
   if (cinfo->global_state != CSTATE_START)
     ERREXIT1(cinfo, JERR_BAD_STATE, cinfo->global_state);
   /* Mark all tables to be written */
-  jpeg_suppress_tables(cinfo, FALSE);
+  jpeg_suppress_tables_xp(cinfo, FALSE);
   /* (Re)initialize error mgr and destination modules */
   (*cinfo->err->reset_error_mgr) ((j_common_ptr) cinfo);
-  (*cinfo->dest->init_destination) (cinfo);
+  (*xinfo->dest_xp->init_destination_xp) (cinfo);
   /* Perform master selection of active modules */
-  transencode_master_selection(cinfo, coef_arrays);
+  transencode_master_selection_xp(cinfo, coef_arrays);
   /* Wait for jpeg_finish_compress() call */
   cinfo->next_scanline = 0;	/* so jpeg_write_marker works */
   cinfo->global_state = CSTATE_WRCOEFS;
@@ -60,8 +61,8 @@ jpeg_write_coefficients (j_compress_ptr cinfo, jvirt_barray_ptr * coef_arrays)
  */
 
 GLOBAL(void)
-jpeg_copy_critical_parameters (j_decompress_ptr srcinfo,
-			       j_compress_ptr dstinfo)
+jpeg_copy_critical_parameters_xp (j_decompress_ptr srcinfo,
+                                     j_compress_ptr dstinfo)
 {
   JQUANT_TBL ** qtblptr;
   jpeg_component_info *incomp, *outcomp;
@@ -77,11 +78,11 @@ jpeg_copy_critical_parameters (j_decompress_ptr srcinfo,
   dstinfo->input_components = srcinfo->num_components;
   dstinfo->in_color_space = srcinfo->jpeg_color_space;
   /* Initialize all parameters to default values */
-  jpeg_set_defaults(dstinfo);
+  jpeg_set_defaults_xp(dstinfo);
   /* jpeg_set_defaults may choose wrong colorspace, eg YCbCr if input is RGB.
    * Fix it to get the right header markers for the image colorspace.
    */
-  jpeg_set_colorspace(dstinfo, srcinfo->jpeg_color_space);
+  jpeg_set_colorspace_xp(dstinfo, srcinfo->jpeg_color_space);
   dstinfo->data_precision = srcinfo->data_precision;
   dstinfo->CCIR601_sampling = srcinfo->CCIR601_sampling;
   /* Copy the source's quantization tables. */
@@ -155,15 +156,16 @@ jpeg_copy_critical_parameters (j_decompress_ptr srcinfo,
  */
 
 LOCAL(void)
-transencode_master_selection (j_compress_ptr cinfo,
-			      jvirt_barray_ptr * coef_arrays)
+transencode_master_selection_xp (j_compress_ptr cinfo,
+                                    jvirt_barray_ptr * coef_arrays)
 {
+  j_compress_ptr_xp xinfo = (j_compress_ptr_xp) cinfo->client_data;
   /* Although we don't actually use input_components for transcoding,
    * jcmaster.c's initial_setup will complain if input_components is 0.
    */
   cinfo->input_components = 1;
   /* Initialize master control (includes parameter checking/processing) */
-  jinit_c_master_control(cinfo, TRUE /* transcode only */);
+  jinit_c_master_control_xp(cinfo, TRUE /* transcode only */);
 
   /* Entropy encoding: either Huffman or arithmetic coding. */
   if (cinfo->arith_code) {
@@ -171,27 +173,27 @@ transencode_master_selection (j_compress_ptr cinfo,
   } else {
     if (cinfo->progressive_mode) {
 #ifdef C_PROGRESSIVE_SUPPORTED
-      jinit_phuff_encoder(cinfo);
+      jinit_phuff_encoder_xp(cinfo);
 #else
       ERREXIT(cinfo, JERR_NOT_COMPILED);
 #endif
     } else
-      jinit_huff_encoder(cinfo);
+      jinit_huff_encoder_xp(cinfo);
   }
 
   /* We need a special coefficient buffer controller. */
-  transencode_coef_controller(cinfo, coef_arrays);
+  transencode_coef_controller_xp(cinfo, coef_arrays);
 
-  jinit_marker_writer(cinfo);
+  jinit_marker_writer_xp(cinfo);
 
   /* We can now tell the memory manager to allocate virtual arrays. */
-  (*cinfo->mem->realize_virt_arrays) ((j_common_ptr) cinfo);
+  (*cinfo->mem->realize_virt_arrays_xp) ((j_common_ptr) cinfo);
 
   /* Write the datastream header (SOI, JFIF) immediately.
    * Frame and scan headers are postponed till later.
    * This lets application insert special markers after the SOI.
    */
-  (*cinfo->marker->write_file_header) (cinfo);
+  (*xinfo->marker_xp->write_file_header_xp) (cinfo);
 }
 
 
@@ -206,7 +208,7 @@ transencode_master_selection (j_compress_ptr cinfo,
 /* Private buffer controller object */
 
 typedef struct {
-  struct jpeg_c_coef_controller pub; /* public fields */
+  struct jpeg_c_coef_controller_xp pub; /* public fields */
 
   JDIMENSION iMCU_row_num;	/* iMCU row # within image */
   JDIMENSION mcu_ctr;		/* counts MCUs processed in current row */
@@ -218,16 +220,17 @@ typedef struct {
 
   /* Workspace for constructing dummy blocks at right/bottom edges. */
   JBLOCKROW dummy_buffer[C_MAX_BLOCKS_IN_MCU];
-} my_coef_controller;
+} my_coef_controller_xp;
 
-typedef my_coef_controller * my_coef_ptr;
+typedef my_coef_controller_xp * my_xp_coef_ptr;
 
 
 LOCAL(void)
-start_iMCU_row (j_compress_ptr cinfo)
+start_iMCU_row_xp (j_compress_ptr cinfo)
 /* Reset within-iMCU-row counters for a new row */
 {
-  my_coef_ptr coef = (my_coef_ptr) cinfo->coef;
+  j_compress_ptr_xp xinfo = (j_compress_ptr_xp) cinfo->client_data;
+  my_xp_coef_ptr coef = (my_xp_coef_ptr) xinfo->coef_xp;
 
   /* In an interleaved scan, an MCU row is the same as an iMCU row.
    * In a noninterleaved scan, an iMCU row has v_samp_factor MCU rows.
@@ -252,15 +255,16 @@ start_iMCU_row (j_compress_ptr cinfo)
  */
 
 METHODDEF(void)
-start_pass_coef (j_compress_ptr cinfo, J_BUF_MODE pass_mode)
+start_pass_coef_xp (j_compress_ptr cinfo, J_BUF_MODE pass_mode)
 {
-  my_coef_ptr coef = (my_coef_ptr) cinfo->coef;
+  j_compress_ptr_xp xinfo = (j_compress_ptr_xp) cinfo->client_data;
+  my_xp_coef_ptr coef = (my_xp_coef_ptr) xinfo->coef_xp;
 
   if (pass_mode != JBUF_CRANK_DEST)
     ERREXIT(cinfo, JERR_BAD_BUFFER_MODE);
 
   coef->iMCU_row_num = 0;
-  start_iMCU_row(cinfo);
+  start_iMCU_row_xp(cinfo);
 }
 
 
@@ -275,9 +279,10 @@ start_pass_coef (j_compress_ptr cinfo, J_BUF_MODE pass_mode)
  */
 
 METHODDEF(boolean)
-compress_output (j_compress_ptr cinfo, JSAMPIMAGE input_buf)
+compress_output_xp (j_compress_ptr cinfo, JSAMPIMAGEXP input_buf)
 {
-  my_coef_ptr coef = (my_coef_ptr) cinfo->coef;
+  j_compress_ptr_xp xinfo = (j_compress_ptr_xp) cinfo->client_data;
+  my_xp_coef_ptr coef = (my_xp_coef_ptr) xinfo->coef_xp;
   JDIMENSION MCU_col_num;	/* index of current MCU within row */
   JDIMENSION last_MCU_col = cinfo->MCUs_per_row - 1;
   JDIMENSION last_iMCU_row = cinfo->total_iMCU_rows - 1;
@@ -334,7 +339,7 @@ compress_output (j_compress_ptr cinfo, JSAMPIMAGE input_buf)
 	}
       }
       /* Try to write the MCU. */
-      if (! (*cinfo->entropy->encode_mcu) (cinfo, MCU_buffer)) {
+      if (! (*xinfo->entropy_xp->encode_mcu_xp) (cinfo, MCU_buffer)) {
 	/* Suspension forced; update state counters and exit */
 	coef->MCU_vert_offset = yoffset;
 	coef->mcu_ctr = MCU_col_num;
@@ -346,7 +351,7 @@ compress_output (j_compress_ptr cinfo, JSAMPIMAGE input_buf)
   }
   /* Completed the iMCU row, advance counters for next one */
   coef->iMCU_row_num++;
-  start_iMCU_row(cinfo);
+  start_iMCU_row_xp(cinfo);
   return TRUE;
 }
 
@@ -360,19 +365,20 @@ compress_output (j_compress_ptr cinfo, JSAMPIMAGE input_buf)
  */
 
 LOCAL(void)
-transencode_coef_controller (j_compress_ptr cinfo,
+transencode_coef_controller_xp (j_compress_ptr cinfo,
 			     jvirt_barray_ptr * coef_arrays)
 {
-  my_coef_ptr coef;
+  j_compress_ptr_xp xinfo = (j_compress_ptr_xp) cinfo->client_data;
+  my_xp_coef_ptr coef;
   JBLOCKROW buffer;
   int i;
 
-  coef = (my_coef_ptr)
+  coef = (my_xp_coef_ptr)
     (*cinfo->mem->alloc_small) ((j_common_ptr) cinfo, JPOOL_IMAGE,
-				SIZEOF(my_coef_controller));
-  cinfo->coef = (struct jpeg_c_coef_controller *) coef;
-  coef->pub.start_pass = start_pass_coef;
-  coef->pub.compress_data = compress_output;
+				SIZEOF(my_coef_controller_xp));
+  xinfo->coef_xp = (struct jpeg_c_coef_controller_xp *) coef;
+  coef->pub.start_pass_xp = start_pass_coef_xp;
+  coef->pub.compress_data_xp = compress_output_xp;
 
   /* Save pointer to virtual arrays */
   coef->whole_image = coef_arrays;

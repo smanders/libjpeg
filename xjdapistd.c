@@ -1,5 +1,5 @@
 /*
- * jdapistd.c
+ * xjdapistd.c
  *
  * Copyright (C) 1994-1996, Thomas G. Lane.
  * This file is part of the Independent JPEG Group's software.
@@ -16,11 +16,11 @@
 
 #define JPEG_INTERNALS
 #include "jinclude.h"
-#include "jpeglib.h"
+#include "xjpeglib.h"
 
 
 /* Forward declarations */
-LOCAL(boolean) output_pass_setup JPP((j_decompress_ptr cinfo));
+LOCAL(boolean) output_pass_setup_xp JPP((j_decompress_ptr cinfo));
 
 
 /*
@@ -35,11 +35,12 @@ LOCAL(boolean) output_pass_setup JPP((j_decompress_ptr cinfo));
  */
 
 GLOBAL(boolean)
-jpeg_start_decompress (j_decompress_ptr cinfo)
+jpeg_start_decompress_xp (j_decompress_ptr cinfo)
 {
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
   if (cinfo->global_state == DSTATE_READY) {
     /* First call: initialize master control, select active modules */
-    jinit_master_decompress(cinfo);
+    jinit_master_decompress_xp(cinfo);
     if (cinfo->buffered_image) {
       /* No more work here; expecting jpeg_start_output next */
       cinfo->global_state = DSTATE_BUFIMAGE;
@@ -49,7 +50,7 @@ jpeg_start_decompress (j_decompress_ptr cinfo)
   }
   if (cinfo->global_state == DSTATE_PRELOAD) {
     /* If file has multiple scans, absorb them all into the coef buffer */
-    if (cinfo->inputctl->has_multiple_scans) {
+    if (xinfo->inputctl_xp->has_multiple_scans) {
 #ifdef D_MULTISCAN_FILES_SUPPORTED
       for (;;) {
 	int retcode;
@@ -57,7 +58,7 @@ jpeg_start_decompress (j_decompress_ptr cinfo)
 	if (cinfo->progress != NULL)
 	  (*cinfo->progress->progress_monitor) ((j_common_ptr) cinfo);
 	/* Absorb some more input */
-	retcode = (*cinfo->inputctl->consume_input) (cinfo);
+	retcode = (*xinfo->inputctl_xp->consume_input_xp) (cinfo);
 	if (retcode == JPEG_SUSPENDED)
 	  return FALSE;
 	if (retcode == JPEG_REACHED_EOI)
@@ -79,7 +80,7 @@ jpeg_start_decompress (j_decompress_ptr cinfo)
   } else if (cinfo->global_state != DSTATE_PRESCAN)
     ERREXIT1(cinfo, JERR_BAD_STATE, cinfo->global_state);
   /* Perform any dummy output passes, and set up for the final pass */
-  return output_pass_setup(cinfo);
+  return output_pass_setup_xp(cinfo);
 }
 
 
@@ -92,16 +93,17 @@ jpeg_start_decompress (j_decompress_ptr cinfo)
  */
 
 LOCAL(boolean)
-output_pass_setup (j_decompress_ptr cinfo)
+output_pass_setup_xp (j_decompress_ptr cinfo)
 {
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
   if (cinfo->global_state != DSTATE_PRESCAN) {
     /* First call: do pass setup */
-    (*cinfo->master->prepare_for_output_pass) (cinfo);
+    (*xinfo->master_xp->prepare_for_output_pass_xp) (cinfo);
     cinfo->output_scanline = 0;
     cinfo->global_state = DSTATE_PRESCAN;
   }
   /* Loop over any required dummy passes */
-  while (cinfo->master->is_dummy_pass) {
+  while (xinfo->master_xp->is_dummy_pass) {
 #ifdef QUANT_2PASS_SUPPORTED
     /* Crank through the dummy pass */
     while (cinfo->output_scanline < cinfo->output_height) {
@@ -114,14 +116,14 @@ output_pass_setup (j_decompress_ptr cinfo)
       }
       /* Process some data */
       last_scanline = cinfo->output_scanline;
-      (*cinfo->main->process_data) (cinfo, (JSAMPARRAY) NULL,
+      (*xinfo->main_xp->process_data_xp) (cinfo, (JSAMPARRAYXP) NULL,
 				    &cinfo->output_scanline, (JDIMENSION) 0);
       if (cinfo->output_scanline == last_scanline)
 	return FALSE;		/* No progress made, must suspend */
     }
     /* Finish up dummy pass, and set up for another one */
-    (*cinfo->master->finish_output_pass) (cinfo);
-    (*cinfo->master->prepare_for_output_pass) (cinfo);
+    (*xinfo->master_xp->finish_output_pass_xp) (cinfo);
+    (*xinfo->master_xp->prepare_for_output_pass_xp) (cinfo);
     cinfo->output_scanline = 0;
 #else
     ERREXIT(cinfo, JERR_NOT_COMPILED);
@@ -149,9 +151,10 @@ output_pass_setup (j_decompress_ptr cinfo)
  */
 
 GLOBAL(JDIMENSION)
-jpeg_read_scanlines (j_decompress_ptr cinfo, JSAMPARRAY scanlines,
+jpeg_read_scanlines_xp (j_decompress_ptr cinfo, JSAMPARRAYXP scanlines,
 		     JDIMENSION max_lines)
 {
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
   JDIMENSION row_ctr;
 
   if (cinfo->global_state != DSTATE_SCANNING)
@@ -170,7 +173,7 @@ jpeg_read_scanlines (j_decompress_ptr cinfo, JSAMPARRAY scanlines,
 
   /* Process some data */
   row_ctr = 0;
-  (*cinfo->main->process_data) (cinfo, scanlines, &row_ctr, max_lines);
+  (*xinfo->main_xp->process_data_xp) (cinfo, scanlines, &row_ctr, max_lines);
   cinfo->output_scanline += row_ctr;
   return row_ctr;
 }
@@ -182,9 +185,10 @@ jpeg_read_scanlines (j_decompress_ptr cinfo, JSAMPARRAY scanlines,
  */
 
 GLOBAL(JDIMENSION)
-jpeg_read_raw_data (j_decompress_ptr cinfo, JSAMPIMAGE data,
+jpeg_read_raw_data_xp (j_decompress_ptr cinfo, JSAMPIMAGEXP data,
 		    JDIMENSION max_lines)
 {
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
   JDIMENSION lines_per_iMCU_row;
 
   if (cinfo->global_state != DSTATE_RAW_OK)
@@ -207,7 +211,7 @@ jpeg_read_raw_data (j_decompress_ptr cinfo, JSAMPIMAGE data,
     ERREXIT(cinfo, JERR_BUFFER_SIZE);
 
   /* Decompress directly into user's buffer. */
-  if (! (*cinfo->coef->decompress_data) (cinfo, data))
+  if (! (*xinfo->coef_xp->decompress_data_xp) (cinfo, data))
     return 0;			/* suspension forced, can do nothing more */
 
   /* OK, we processed one iMCU row. */
@@ -225,20 +229,21 @@ jpeg_read_raw_data (j_decompress_ptr cinfo, JSAMPIMAGE data,
  */
 
 GLOBAL(boolean)
-jpeg_start_output (j_decompress_ptr cinfo, int scan_number)
+jpeg_start_output_xp (j_decompress_ptr cinfo, int scan_number)
 {
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
   if (cinfo->global_state != DSTATE_BUFIMAGE &&
       cinfo->global_state != DSTATE_PRESCAN)
     ERREXIT1(cinfo, JERR_BAD_STATE, cinfo->global_state);
   /* Limit scan number to valid range */
   if (scan_number <= 0)
     scan_number = 1;
-  if (cinfo->inputctl->eoi_reached &&
+  if (xinfo->inputctl_xp->eoi_reached &&
       scan_number > cinfo->input_scan_number)
     scan_number = cinfo->input_scan_number;
   cinfo->output_scan_number = scan_number;
   /* Perform any dummy output passes, and set up for the real pass */
-  return output_pass_setup(cinfo);
+  return output_pass_setup_xp(cinfo);
 }
 
 
@@ -250,13 +255,14 @@ jpeg_start_output (j_decompress_ptr cinfo, int scan_number)
  */
 
 GLOBAL(boolean)
-jpeg_finish_output (j_decompress_ptr cinfo)
+jpeg_finish_output_xp (j_decompress_ptr cinfo)
 {
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
   if ((cinfo->global_state == DSTATE_SCANNING ||
        cinfo->global_state == DSTATE_RAW_OK) && cinfo->buffered_image) {
     /* Terminate this pass. */
     /* We do not require the whole pass to have been completed. */
-    (*cinfo->master->finish_output_pass) (cinfo);
+    (*xinfo->master_xp->finish_output_pass_xp) (cinfo);
     cinfo->global_state = DSTATE_BUFPOST;
   } else if (cinfo->global_state != DSTATE_BUFPOST) {
     /* BUFPOST = repeat call after a suspension, anything else is error */
@@ -264,8 +270,8 @@ jpeg_finish_output (j_decompress_ptr cinfo)
   }
   /* Read markers looking for SOS or EOI */
   while (cinfo->input_scan_number <= cinfo->output_scan_number &&
-	 ! cinfo->inputctl->eoi_reached) {
-    if ((*cinfo->inputctl->consume_input) (cinfo) == JPEG_SUSPENDED)
+	 ! xinfo->inputctl_xp->eoi_reached) {
+    if ((*xinfo->inputctl_xp->consume_input_xp) (cinfo) == JPEG_SUSPENDED)
       return FALSE;		/* Suspend, come back later */
   }
   cinfo->global_state = DSTATE_BUFIMAGE;

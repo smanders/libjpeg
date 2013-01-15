@@ -1,5 +1,5 @@
 /*
- * jmemmgr.c
+ * xjmemmgr.c
  *
  * Copyright (C) 1991-1997, Thomas G. Lane.
  * This file is part of the Independent JPEG Group's software.
@@ -27,7 +27,7 @@
 #define JPEG_INTERNALS
 #define AM_MEMORY_MANAGER	/* we define jvirt_Xarray_control structs */
 #include "jinclude.h"
-#include "jpeglib.h"
+#include "xjpeglib.h"
 #include "jmemsys.h"		/* import the system-dependent declarations */
 
 #ifndef NO_GETENV
@@ -148,7 +148,7 @@ typedef my_memory_mgr * my_mem_ptr;
  */
 
 struct jvirt_sarray_control {
-  JSAMPARRAY mem_buffer;	/* => the in-memory buffer */
+  JSAMPARRAYXP mem_buffer;	/* => the in-memory buffer */
   JDIMENSION rows_in_array;	/* total virtual array height */
   JDIMENSION samplesperrow;	/* width of array (and of memory buffer) */
   JDIMENSION maxaccess;		/* max rows accessed by access_virt_sarray */
@@ -391,20 +391,20 @@ alloc_large (j_common_ptr cinfo, int pool_id, size_t sizeofobject)
  * a virtual array.
  */
 
-METHODDEF(JSAMPARRAY)
-alloc_sarray (j_common_ptr cinfo, int pool_id,
+METHODDEF(JSAMPARRAYXP)
+alloc_sarray_xp (j_common_ptr cinfo, int pool_id,
 	      JDIMENSION samplesperrow, JDIMENSION numrows)
 /* Allocate a 2-D sample array */
 {
   my_mem_ptr mem = (my_mem_ptr) cinfo->mem;
-  JSAMPARRAY result;
-  JSAMPROW workspace;
+  JSAMPARRAYXP result;
+  JSAMPROWXP workspace;
   JDIMENSION rowsperchunk, currow, i;
   long ltemp;
 
   /* Calculate max # of rows allowed in one allocation chunk */
   ltemp = (MAX_ALLOC_CHUNK-SIZEOF(large_pool_hdr)) /
-	  ((long) samplesperrow * SIZEOF(JSAMPLE));
+          ((long) samplesperrow * SIZEOF(JSAMPLEXP));
   if (ltemp <= 0)
     ERREXIT(cinfo, JERR_WIDTH_OVERFLOW);
   if (ltemp < (long) numrows)
@@ -414,16 +414,16 @@ alloc_sarray (j_common_ptr cinfo, int pool_id,
   mem->last_rowsperchunk = rowsperchunk;
 
   /* Get space for row pointers (small object) */
-  result = (JSAMPARRAY) alloc_small(cinfo, pool_id,
-				    (size_t) (numrows * SIZEOF(JSAMPROW)));
+  result = (JSAMPARRAYXP) alloc_small(cinfo, pool_id,
+                                 (size_t) (numrows * SIZEOF(JSAMPROWXP)));
 
   /* Get the rows themselves (large objects) */
   currow = 0;
   while (currow < numrows) {
     rowsperchunk = MIN(rowsperchunk, numrows - currow);
-    workspace = (JSAMPROW) alloc_large(cinfo, pool_id,
+    workspace = (JSAMPROWXP) alloc_large(cinfo, pool_id,
 	(size_t) ((size_t) rowsperchunk * (size_t) samplesperrow
-		  * SIZEOF(JSAMPLE)));
+                  * SIZEOF(JSAMPLEXP)));
     for (i = rowsperchunk; i > 0; i--) {
       result[currow++] = workspace;
       workspace += samplesperrow;
@@ -580,7 +580,7 @@ request_virt_barray (j_common_ptr cinfo, int pool_id, boolean pre_zero,
 
 
 METHODDEF(void)
-realize_virt_arrays (j_common_ptr cinfo)
+  realize_virt_arrays_xp (j_common_ptr cinfo)
 /* Allocate the in-memory buffers for any unrealized virtual arrays */
 {
   my_mem_ptr mem = (my_mem_ptr) cinfo->mem;
@@ -598,9 +598,9 @@ realize_virt_arrays (j_common_ptr cinfo)
   for (sptr = mem->virt_sarray_list; sptr != NULL; sptr = sptr->next) {
     if (sptr->mem_buffer == NULL) { /* if not realized yet */
       space_per_minheight += (long) sptr->maxaccess *
-			     (long) sptr->samplesperrow * SIZEOF(JSAMPLE);
+                             (long) sptr->samplesperrow * SIZEOF(JSAMPLEXP);
       maximum_space += (long) sptr->rows_in_array *
-		       (long) sptr->samplesperrow * SIZEOF(JSAMPLE);
+                       (long) sptr->samplesperrow * SIZEOF(JSAMPLEXP);
     }
   }
   for (bptr = mem->virt_barray_list; bptr != NULL; bptr = bptr->next) {
@@ -648,10 +648,10 @@ realize_virt_arrays (j_common_ptr cinfo)
 	jpeg_open_backing_store(cinfo, & sptr->b_s_info,
 				(long) sptr->rows_in_array *
 				(long) sptr->samplesperrow *
-				(long) SIZEOF(JSAMPLE));
+				(long) SIZEOF(JSAMPLEXP));
 	sptr->b_s_open = TRUE;
       }
-      sptr->mem_buffer = alloc_sarray(cinfo, JPOOL_IMAGE,
+      sptr->mem_buffer = alloc_sarray_xp(cinfo, JPOOL_IMAGE,
 				      sptr->samplesperrow, sptr->rows_in_mem);
       sptr->rowsperchunk = mem->last_rowsperchunk;
       sptr->cur_start_row = 0;
@@ -692,7 +692,7 @@ do_sarray_io (j_common_ptr cinfo, jvirt_sarray_ptr ptr, boolean writing)
 {
   long bytesperrow, file_offset, byte_count, rows, thisrow, i;
 
-  bytesperrow = (long) ptr->samplesperrow * SIZEOF(JSAMPLE);
+  bytesperrow = (long) ptr->samplesperrow * SIZEOF(JSAMPLEXP);
   file_offset = ptr->cur_start_row * bytesperrow;
   /* Loop to read or write each allocation chunk in mem_buffer */
   for (i = 0; i < (long) ptr->rows_in_mem; i += ptr->rowsperchunk) {
@@ -752,8 +752,8 @@ do_barray_io (j_common_ptr cinfo, jvirt_barray_ptr ptr, boolean writing)
 }
 
 
-METHODDEF(JSAMPARRAY)
-access_virt_sarray (j_common_ptr cinfo, jvirt_sarray_ptr ptr,
+METHODDEF(JSAMPARRAYXP)
+access_virt_sarray_xp (j_common_ptr cinfo, jvirt_sarray_ptr ptr,
 		    JDIMENSION start_row, JDIMENSION num_rows,
 		    boolean writable)
 /* Access the part of a virtual sample array starting at start_row */
@@ -817,7 +817,7 @@ access_virt_sarray (j_common_ptr cinfo, jvirt_sarray_ptr ptr,
     if (writable)
       ptr->first_undef_row = end_row;
     if (ptr->pre_zero) {
-      size_t bytesperrow = (size_t) ptr->samplesperrow * SIZEOF(JSAMPLE);
+      size_t bytesperrow = (size_t) ptr->samplesperrow * SIZEOF(JSAMPLEXP);
       undef_row -= ptr->cur_start_row; /* make indexes relative to buffer */
       end_row -= ptr->cur_start_row;
       while (undef_row < end_row) {
@@ -1025,7 +1025,7 @@ self_destruct (j_common_ptr cinfo)
  */
 
 GLOBAL(void)
-jinit_memory_mgr (j_common_ptr cinfo)
+jinit_memory_mgr_xp (j_common_ptr cinfo)
 {
   my_mem_ptr mem;
   long max_to_use;
@@ -1066,12 +1066,12 @@ jinit_memory_mgr (j_common_ptr cinfo)
   /* OK, fill in the method pointers */
   mem->pub.alloc_small = alloc_small;
   mem->pub.alloc_large = alloc_large;
-  mem->pub.alloc_sarray = alloc_sarray;
+  mem->pub.alloc_sarray_xp = alloc_sarray_xp;
   mem->pub.alloc_barray = alloc_barray;
   mem->pub.request_virt_sarray = request_virt_sarray;
   mem->pub.request_virt_barray = request_virt_barray;
-  mem->pub.realize_virt_arrays = realize_virt_arrays;
-  mem->pub.access_virt_sarray = access_virt_sarray;
+  mem->pub.realize_virt_arrays_xp = realize_virt_arrays_xp;
+  mem->pub.access_virt_sarray_xp = access_virt_sarray_xp;
   mem->pub.access_virt_barray = access_virt_barray;
   mem->pub.free_pool = free_pool;
   mem->pub.self_destruct = self_destruct;

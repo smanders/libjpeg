@@ -1,5 +1,5 @@
 /*
- * jdinput.c
+ * xjdinput.c
  *
  * Copyright (C) 1991-1997, Thomas G. Lane.
  * This file is part of the Independent JPEG Group's software.
@@ -13,13 +13,14 @@
 
 #define JPEG_INTERNALS
 #include "jinclude.h"
-#include "jpeglib.h"
+#include "xjpeglib.h"
+#include "xjerror.h"
 
 
 /* Private state */
 
 typedef struct {
-  struct jpeg_input_controller pub; /* public fields */
+  struct jpeg_input_controller_xp pub; /* public fields */
 
   boolean inheaders;		/* TRUE until first SOS is reached */
 } my_input_controller;
@@ -28,7 +29,7 @@ typedef my_input_controller * my_inputctl_ptr;
 
 
 /* Forward declarations */
-METHODDEF(int) consume_markers JPP((j_decompress_ptr cinfo));
+METHODDEF(int) consume_markers_xp JPP((j_decompress_ptr cinfo));
 
 
 /*
@@ -36,9 +37,10 @@ METHODDEF(int) consume_markers JPP((j_decompress_ptr cinfo));
  */
 
 LOCAL(void)
-initial_setup (j_decompress_ptr cinfo)
+initial_setup_xp (j_decompress_ptr cinfo)
 /* Called once, when first SOS marker is reached */
 {
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
   int ci;
   jpeg_component_info *compptr;
 
@@ -48,7 +50,7 @@ initial_setup (j_decompress_ptr cinfo)
     ERREXIT1(cinfo, JERR_IMAGE_TOO_BIG, (unsigned int) JPEG_MAX_DIMENSION);
 
   /* For now, precision must match compiled-in value... */
-  if (cinfo->data_precision != BITS_IN_JSAMPLE)
+  if (cinfo->data_precision != BITS_IN_JSAMPLE12)
     ERREXIT1(cinfo, JERR_BAD_PRECISION, cinfo->data_precision);
 
   /* Check that number of components won't exceed internal array sizes */
@@ -111,20 +113,21 @@ initial_setup (j_decompress_ptr cinfo)
 
   /* Decide whether file contains multiple scans */
   if (cinfo->comps_in_scan < cinfo->num_components || cinfo->progressive_mode)
-    cinfo->inputctl->has_multiple_scans = TRUE;
+    xinfo->inputctl_xp->has_multiple_scans = TRUE;
   else
-    cinfo->inputctl->has_multiple_scans = FALSE;
+    xinfo->inputctl_xp->has_multiple_scans = FALSE;
 }
 
 
 LOCAL(void)
-per_scan_setup (j_decompress_ptr cinfo)
+per_scan_setup_xp (j_decompress_ptr cinfo)
 /* Do computations that are needed before processing a JPEG scan */
 /* cinfo->comps_in_scan and cinfo->cur_comp_info[] were set from SOS marker */
 {
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
   int ci, mcublks, tmp;
   jpeg_component_info *compptr;
-  
+
   if (cinfo->comps_in_scan == 1) {
     
     /* Noninterleaved (single-component) scan */
@@ -217,7 +220,7 @@ per_scan_setup (j_decompress_ptr cinfo)
  */
 
 LOCAL(void)
-latch_quant_tables (j_decompress_ptr cinfo)
+latch_quant_tables_xp (j_decompress_ptr cinfo)
 {
   int ci, qtblno;
   jpeg_component_info *compptr;
@@ -251,13 +254,14 @@ latch_quant_tables (j_decompress_ptr cinfo)
  */
 
 METHODDEF(void)
-start_input_pass (j_decompress_ptr cinfo)
+start_input_pass_xp (j_decompress_ptr cinfo)
 {
-  per_scan_setup(cinfo);
-  latch_quant_tables(cinfo);
-  (*cinfo->entropy->start_pass) (cinfo);
-  (*cinfo->coef->start_input_pass) (cinfo);
-  cinfo->inputctl->consume_input = cinfo->coef->consume_data;
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
+  per_scan_setup_xp(cinfo);
+  latch_quant_tables_xp(cinfo);
+  (*xinfo->entropy_xp->start_pass_xp) (cinfo);
+  (*xinfo->coef_xp->start_input_pass_xp) (cinfo);
+  xinfo->inputctl_xp->consume_input_xp = xinfo->coef_xp->consume_data_xp;
 }
 
 
@@ -268,9 +272,10 @@ start_input_pass (j_decompress_ptr cinfo)
  */
 
 METHODDEF(void)
-finish_input_pass (j_decompress_ptr cinfo)
+finish_input_pass_xp (j_decompress_ptr cinfo)
 {
-  cinfo->inputctl->consume_input = consume_markers;
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
+  xinfo->inputctl_xp->consume_input_xp = consume_markers_xp;
 }
 
 
@@ -285,20 +290,21 @@ finish_input_pass (j_decompress_ptr cinfo)
  */
 
 METHODDEF(int)
-consume_markers (j_decompress_ptr cinfo)
+consume_markers_xp (j_decompress_ptr cinfo)
 {
-  my_inputctl_ptr inputctl = (my_inputctl_ptr) cinfo->inputctl;
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
+  my_inputctl_ptr inputctl = (my_inputctl_ptr) xinfo->inputctl_xp;
   int val;
 
   if (inputctl->pub.eoi_reached) /* After hitting EOI, read no further */
     return JPEG_REACHED_EOI;
 
-  val = (*cinfo->marker->read_markers) (cinfo);
+  val = (*xinfo->marker_xp->read_markers_xp) (cinfo);
 
   switch (val) {
   case JPEG_REACHED_SOS:	/* Found SOS */
     if (inputctl->inheaders) {	/* 1st SOS */
-      initial_setup(cinfo);
+      initial_setup_xp(cinfo);
       inputctl->inheaders = FALSE;
       /* Note: start_input_pass must be called by jdmaster.c
        * before any more input can be consumed.  jdapimin.c is
@@ -307,13 +313,13 @@ consume_markers (j_decompress_ptr cinfo)
     } else {			/* 2nd or later SOS marker */
       if (! inputctl->pub.has_multiple_scans)
 	ERREXIT(cinfo, JERR_EOI_EXPECTED); /* Oops, I wasn't expecting this! */
-      start_input_pass(cinfo);
+      start_input_pass_xp(cinfo);
     }
     break;
   case JPEG_REACHED_EOI:	/* Found EOI */
     inputctl->pub.eoi_reached = TRUE;
     if (inputctl->inheaders) {	/* Tables-only datastream, apparently */
-      if (cinfo->marker->saw_SOF)
+      if (xinfo->marker_xp->saw_SOF)
 	ERREXIT(cinfo, JERR_SOF_NO_SOS);
     } else {
       /* Prevent infinite loop in coef ctlr's decompress_data routine
@@ -336,17 +342,18 @@ consume_markers (j_decompress_ptr cinfo)
  */
 
 METHODDEF(void)
-reset_input_controller (j_decompress_ptr cinfo)
+reset_input_controller_xp (j_decompress_ptr cinfo)
 {
-  my_inputctl_ptr inputctl = (my_inputctl_ptr) cinfo->inputctl;
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
+  my_inputctl_ptr inputctl = (my_inputctl_ptr) xinfo->inputctl_xp;
 
-  inputctl->pub.consume_input = consume_markers;
+  inputctl->pub.consume_input_xp = consume_markers_xp;
   inputctl->pub.has_multiple_scans = FALSE; /* "unknown" would be better */
   inputctl->pub.eoi_reached = FALSE;
   inputctl->inheaders = TRUE;
   /* Reset other modules */
   (*cinfo->err->reset_error_mgr) ((j_common_ptr) cinfo);
-  (*cinfo->marker->reset_marker_reader) (cinfo);
+  (*xinfo->marker_xp->reset_marker_reader_xp) (cinfo);
   /* Reset progression state -- would be cleaner if entropy decoder did this */
   cinfo->coef_bits = NULL;
 }
@@ -358,20 +365,21 @@ reset_input_controller (j_decompress_ptr cinfo)
  */
 
 GLOBAL(void)
-jinit_input_controller (j_decompress_ptr cinfo)
+jinit_input_controller_xp (j_decompress_ptr cinfo)
 {
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
   my_inputctl_ptr inputctl;
 
   /* Create subobject in permanent pool */
   inputctl = (my_inputctl_ptr)
     (*cinfo->mem->alloc_small) ((j_common_ptr) cinfo, JPOOL_PERMANENT,
 				SIZEOF(my_input_controller));
-  cinfo->inputctl = (struct jpeg_input_controller *) inputctl;
+  xinfo->inputctl_xp = (struct jpeg_input_controller_xp *) inputctl;
   /* Initialize method pointers */
-  inputctl->pub.consume_input = consume_markers;
-  inputctl->pub.reset_input_controller = reset_input_controller;
-  inputctl->pub.start_input_pass = start_input_pass;
-  inputctl->pub.finish_input_pass = finish_input_pass;
+  inputctl->pub.consume_input_xp = consume_markers_xp;
+  inputctl->pub.reset_input_controller_xp = reset_input_controller_xp;
+  inputctl->pub.start_input_pass_xp = start_input_pass_xp;
+  inputctl->pub.finish_input_pass_xp = finish_input_pass_xp;
   /* Initialize state: can't use reset_input_controller since we don't
    * want to try to reset other modules yet.
    */

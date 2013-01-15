@@ -1,5 +1,5 @@
 /*
- * jdphuff.c
+ * xjdphuff.c
  *
  * Copyright (C) 1995-1997, Thomas G. Lane.
  * This file is part of the Independent JPEG Group's software.
@@ -16,8 +16,8 @@
 
 #define JPEG_INTERNALS
 #include "jinclude.h"
-#include "jpeglib.h"
-#include "jdhuff.h"		/* Declarations shared with jdhuff.c */
+#include "xjpeglib.h"
+#include "xjdhuff.h"		/* Declarations shared with jdhuff.c */
 
 
 #ifdef D_PROGRESSIVE_SUPPORTED
@@ -54,7 +54,7 @@ typedef struct {
 
 
 typedef struct {
-  struct jpeg_entropy_decoder pub; /* public fields */
+  struct jpeg_entropy_decoder_xp pub; /* public fields */
 
   /* These fields are loaded into local variables at start of each MCU.
    * In case of suspension, we exit WITHOUT updating them.
@@ -74,13 +74,13 @@ typedef struct {
 typedef phuff_entropy_decoder * phuff_entropy_ptr;
 
 /* Forward declarations */
-METHODDEF(boolean) decode_mcu_DC_first JPP((j_decompress_ptr cinfo,
+METHODDEF(boolean) decode_mcu_DC_first_xp JPP((j_decompress_ptr cinfo,
 					    JBLOCKROW *MCU_data));
-METHODDEF(boolean) decode_mcu_AC_first JPP((j_decompress_ptr cinfo,
+METHODDEF(boolean) decode_mcu_AC_first_xp JPP((j_decompress_ptr cinfo,
 					    JBLOCKROW *MCU_data));
-METHODDEF(boolean) decode_mcu_DC_refine JPP((j_decompress_ptr cinfo,
+METHODDEF(boolean) decode_mcu_DC_refine_xp JPP((j_decompress_ptr cinfo,
 					     JBLOCKROW *MCU_data));
-METHODDEF(boolean) decode_mcu_AC_refine JPP((j_decompress_ptr cinfo,
+METHODDEF(boolean) decode_mcu_AC_refine_xp JPP((j_decompress_ptr cinfo,
 					     JBLOCKROW *MCU_data));
 
 
@@ -89,9 +89,10 @@ METHODDEF(boolean) decode_mcu_AC_refine JPP((j_decompress_ptr cinfo,
  */
 
 METHODDEF(void)
-start_pass_phuff_decoder (j_decompress_ptr cinfo)
+start_pass_phuff_decoder_xp (j_decompress_ptr cinfo)
 {
-  phuff_entropy_ptr entropy = (phuff_entropy_ptr) cinfo->entropy;
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
+  phuff_entropy_ptr entropy = (phuff_entropy_ptr) xinfo->entropy_xp;
   boolean is_DC_band, bad;
   int ci, coefi, tbl;
   int *coef_bit_ptr;
@@ -148,14 +149,14 @@ start_pass_phuff_decoder (j_decompress_ptr cinfo)
   /* Select MCU decoding routine */
   if (cinfo->Ah == 0) {
     if (is_DC_band)
-      entropy->pub.decode_mcu = decode_mcu_DC_first;
+      entropy->pub.decode_mcu_xp = decode_mcu_DC_first_xp;
     else
-      entropy->pub.decode_mcu = decode_mcu_AC_first;
+      entropy->pub.decode_mcu_xp = decode_mcu_AC_first_xp;
   } else {
     if (is_DC_band)
-      entropy->pub.decode_mcu = decode_mcu_DC_refine;
+      entropy->pub.decode_mcu_xp = decode_mcu_DC_refine_xp;
     else
-      entropy->pub.decode_mcu = decode_mcu_AC_refine;
+      entropy->pub.decode_mcu_xp = decode_mcu_AC_refine_xp;
   }
 
   for (ci = 0; ci < cinfo->comps_in_scan; ci++) {
@@ -166,12 +167,12 @@ start_pass_phuff_decoder (j_decompress_ptr cinfo)
     if (is_DC_band) {
       if (cinfo->Ah == 0) {	/* DC refinement needs no table */
 	tbl = compptr->dc_tbl_no;
-	jpeg_make_d_derived_tbl(cinfo, TRUE, tbl,
+	jpeg_make_d_derived_tbl_xp(cinfo, TRUE, tbl,
 				& entropy->derived_tbls[tbl]);
       }
     } else {
       tbl = compptr->ac_tbl_no;
-      jpeg_make_d_derived_tbl(cinfo, FALSE, tbl,
+      jpeg_make_d_derived_tbl_xp(cinfo, FALSE, tbl,
 			      & entropy->derived_tbls[tbl]);
       /* remember the single active table */
       entropy->ac_derived_tbl = entropy->derived_tbls[tbl];
@@ -225,18 +226,19 @@ static const int extend_offset[16] = /* entry n is (-1 << n) + 1 */
  */
 
 LOCAL(boolean)
-process_restart (j_decompress_ptr cinfo)
+process_restart_xp (j_decompress_ptr cinfo)
 {
-  phuff_entropy_ptr entropy = (phuff_entropy_ptr) cinfo->entropy;
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
+  phuff_entropy_ptr entropy = (phuff_entropy_ptr) xinfo->entropy_xp;
   int ci;
 
   /* Throw away any unused bits remaining in bit buffer; */
   /* include any full bytes in next_marker's count of discarded bytes */
-  cinfo->marker->discarded_bytes += entropy->bitstate.bits_left / 8;
+  xinfo->marker_xp->discarded_bytes += entropy->bitstate.bits_left / 8;
   entropy->bitstate.bits_left = 0;
 
   /* Advance past the RSTn marker */
-  if (! (*cinfo->marker->read_restart_marker) (cinfo))
+  if (! (*xinfo->marker_xp->read_restart_marker) (cinfo))
     return FALSE;
 
   /* Re-initialize DC predictions to 0 */
@@ -283,9 +285,10 @@ process_restart (j_decompress_ptr cinfo)
  */
 
 METHODDEF(boolean)
-decode_mcu_DC_first (j_decompress_ptr cinfo, JBLOCKROW *MCU_data)
+decode_mcu_DC_first_xp (j_decompress_ptr cinfo, JBLOCKROW *MCU_data)
 {   
-  phuff_entropy_ptr entropy = (phuff_entropy_ptr) cinfo->entropy;
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
+  phuff_entropy_ptr entropy = (phuff_entropy_ptr) xinfo->entropy_xp;
   int Al = cinfo->Al;
   register int s, r;
   int blkn, ci;
@@ -298,7 +301,7 @@ decode_mcu_DC_first (j_decompress_ptr cinfo, JBLOCKROW *MCU_data)
   /* Process restart marker if needed; may have to suspend */
   if (cinfo->restart_interval) {
     if (entropy->restarts_to_go == 0)
-      if (! process_restart(cinfo))
+      if (! process_restart_xp(cinfo))
 	return FALSE;
   }
 
@@ -322,7 +325,7 @@ decode_mcu_DC_first (j_decompress_ptr cinfo, JBLOCKROW *MCU_data)
       /* Decode a single block's worth of coefficients */
 
       /* Section F.2.2.1: decode the DC coefficient difference */
-      HUFF_DECODE(s, br_state, tbl, return FALSE, label1);
+      HUFF_DECODE_XP(s, br_state, tbl, return FALSE, label1);
       if (s) {
 	CHECK_BIT_BUFFER(br_state, s, return FALSE);
 	r = GET_BITS(s);
@@ -354,9 +357,10 @@ decode_mcu_DC_first (j_decompress_ptr cinfo, JBLOCKROW *MCU_data)
  */
 
 METHODDEF(boolean)
-decode_mcu_AC_first (j_decompress_ptr cinfo, JBLOCKROW *MCU_data)
+decode_mcu_AC_first_xp (j_decompress_ptr cinfo, JBLOCKROW *MCU_data)
 {   
-  phuff_entropy_ptr entropy = (phuff_entropy_ptr) cinfo->entropy;
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
+  phuff_entropy_ptr entropy = (phuff_entropy_ptr) xinfo->entropy_xp;
   int Se = cinfo->Se;
   int Al = cinfo->Al;
   register int s, k, r;
@@ -368,7 +372,7 @@ decode_mcu_AC_first (j_decompress_ptr cinfo, JBLOCKROW *MCU_data)
   /* Process restart marker if needed; may have to suspend */
   if (cinfo->restart_interval) {
     if (entropy->restarts_to_go == 0)
-      if (! process_restart(cinfo))
+      if (! process_restart_xp(cinfo))
 	return FALSE;
   }
 
@@ -392,7 +396,7 @@ decode_mcu_AC_first (j_decompress_ptr cinfo, JBLOCKROW *MCU_data)
       tbl = entropy->ac_derived_tbl;
 
       for (k = cinfo->Ss; k <= Se; k++) {
-	HUFF_DECODE(s, br_state, tbl, return FALSE, label2);
+	HUFF_DECODE_XP(s, br_state, tbl, return FALSE, label2);
 	r = s >> 4;
 	s &= 15;
 	if (s) {
@@ -439,9 +443,10 @@ decode_mcu_AC_first (j_decompress_ptr cinfo, JBLOCKROW *MCU_data)
  */
 
 METHODDEF(boolean)
-decode_mcu_DC_refine (j_decompress_ptr cinfo, JBLOCKROW *MCU_data)
+decode_mcu_DC_refine_xp (j_decompress_ptr cinfo, JBLOCKROW *MCU_data)
 {   
-  phuff_entropy_ptr entropy = (phuff_entropy_ptr) cinfo->entropy;
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
+  phuff_entropy_ptr entropy = (phuff_entropy_ptr) xinfo->entropy_xp;
   int p1 = 1 << cinfo->Al;	/* 1 in the bit position being coded */
   int blkn;
   JBLOCKROW block;
@@ -450,7 +455,7 @@ decode_mcu_DC_refine (j_decompress_ptr cinfo, JBLOCKROW *MCU_data)
   /* Process restart marker if needed; may have to suspend */
   if (cinfo->restart_interval) {
     if (entropy->restarts_to_go == 0)
-      if (! process_restart(cinfo))
+      if (! process_restart_xp(cinfo))
 	return FALSE;
   }
 
@@ -488,9 +493,10 @@ decode_mcu_DC_refine (j_decompress_ptr cinfo, JBLOCKROW *MCU_data)
  */
 
 METHODDEF(boolean)
-decode_mcu_AC_refine (j_decompress_ptr cinfo, JBLOCKROW *MCU_data)
+decode_mcu_AC_refine_xp (j_decompress_ptr cinfo, JBLOCKROW *MCU_data)
 {   
-  phuff_entropy_ptr entropy = (phuff_entropy_ptr) cinfo->entropy;
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
+  phuff_entropy_ptr entropy = (phuff_entropy_ptr) xinfo->entropy_xp;
   int Se = cinfo->Se;
   int p1 = 1 << cinfo->Al;	/* 1 in the bit position being coded */
   int m1 = (-1) << cinfo->Al;	/* -1 in the bit position being coded */
@@ -506,7 +512,7 @@ decode_mcu_AC_refine (j_decompress_ptr cinfo, JBLOCKROW *MCU_data)
   /* Process restart marker if needed; may have to suspend */
   if (cinfo->restart_interval) {
     if (entropy->restarts_to_go == 0)
-      if (! process_restart(cinfo))
+      if (! process_restart_xp(cinfo))
 	return FALSE;
   }
 
@@ -535,7 +541,7 @@ decode_mcu_AC_refine (j_decompress_ptr cinfo, JBLOCKROW *MCU_data)
 
     if (EOBRUN == 0) {
       for (; k <= Se; k++) {
-	HUFF_DECODE(s, br_state, tbl, goto undoit, label3);
+	HUFF_DECODE_XP(s, br_state, tbl, goto undoit, label3);
 	r = s >> 4;
 	s &= 15;
 	if (s) {
@@ -638,8 +644,9 @@ undoit:
  */
 
 GLOBAL(void)
-jinit_phuff_decoder (j_decompress_ptr cinfo)
+jinit_phuff_decoder_xp (j_decompress_ptr cinfo)
 {
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
   phuff_entropy_ptr entropy;
   int *coef_bit_ptr;
   int ci, i;
@@ -647,8 +654,8 @@ jinit_phuff_decoder (j_decompress_ptr cinfo)
   entropy = (phuff_entropy_ptr)
     (*cinfo->mem->alloc_small) ((j_common_ptr) cinfo, JPOOL_IMAGE,
 				SIZEOF(phuff_entropy_decoder));
-  cinfo->entropy = (struct jpeg_entropy_decoder *) entropy;
-  entropy->pub.start_pass = start_pass_phuff_decoder;
+  xinfo->entropy_xp = (struct jpeg_entropy_decoder_xp *) entropy;
+  entropy->pub.start_pass_xp = start_pass_phuff_decoder_xp;
 
   /* Mark derived tables unallocated */
   for (i = 0; i < NUM_HUFF_TBLS; i++) {

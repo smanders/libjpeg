@@ -1,5 +1,5 @@
 /*
- * jcomapi.c
+ * xjcomapi.c
  *
  * Copyright (C) 1994-1997, Thomas G. Lane.
  * This file is part of the Independent JPEG Group's software.
@@ -11,7 +11,7 @@
 
 #define JPEG_INTERNALS
 #include "jinclude.h"
-#include "jpeglib.h"
+#include "xjpeglib.h"
 
 
 /*
@@ -26,7 +26,7 @@
  */
 
 GLOBAL(void)
-jpeg_abort (j_common_ptr cinfo)
+jpeg_abort_xp (j_common_ptr cinfo)
 {
   int pool;
 
@@ -66,7 +66,7 @@ jpeg_abort (j_common_ptr cinfo)
  */
 
 GLOBAL(void)
-jpeg_destroy (j_common_ptr cinfo)
+jpeg_destroy_xp (j_common_ptr cinfo)
 {
   /* We need only tell the memory manager to release everything. */
   /* NB: mem pointer is NULL if memory mgr failed to initialize. */
@@ -77,13 +77,14 @@ jpeg_destroy (j_common_ptr cinfo)
 }
 
 
+#if 0
 /*
  * Convenience routines for allocating quantization and Huffman tables.
  * (Would jutils.c be a more reasonable place to put these?)
  */
 
 GLOBAL(JQUANT_TBL *)
-jpeg_alloc_quant_table (j_common_ptr cinfo)
+jpeg_alloc_quant_table_xp (j_common_ptr cinfo)
 {
   JQUANT_TBL *tbl;
 
@@ -95,7 +96,7 @@ jpeg_alloc_quant_table (j_common_ptr cinfo)
 
 
 GLOBAL(JHUFF_TBL *)
-jpeg_alloc_huff_table (j_common_ptr cinfo)
+jpeg_alloc_huff_table_xp (j_common_ptr cinfo)
 {
   JHUFF_TBL *tbl;
 
@@ -104,3 +105,4 @@ jpeg_alloc_huff_table (j_common_ptr cinfo)
   tbl->sent_table = FALSE;	/* make sure this is false in any new table */
   return tbl;
 }
+#endif

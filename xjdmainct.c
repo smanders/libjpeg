@@ -357,8 +357,16 @@ process_data_simple_main_xp (j_decompress_ptr cinfo,
 
   /* Read input data if we haven't filled the main buffer yet */
   if (! main->buffer_full) {
-    if (! (*xinfo->coef_xp->decompress_data_xp) (cinfo, main->buffer))
-      return;			/* suspension forced, can do nothing more */
+    if (xinfo->lossless_xp)
+    {
+      if (! (*xinfo->codec_xp->decompress_data) (cinfo, main->buffer))
+        return;			/* suspension forced, can do nothing more */
+    }
+    else
+    {
+      if (! (*xinfo->coef_xp->decompress_data_xp) (cinfo, main->buffer))
+        return;			/* suspension forced, can do nothing more */
+    }
     main->buffer_full = TRUE;	/* OK, we have an iMCU row to work with */
   }
 
@@ -397,9 +405,18 @@ process_data_context_main_xp (j_decompress_ptr cinfo,
 
   /* Read input data if we haven't filled the main buffer yet */
   if (! main->buffer_full) {
-    if (! (*xinfo->coef_xp->decompress_data_xp) (cinfo,
-					   main->xbuffer[main->whichptr]))
-      return;			/* suspension forced, can do nothing more */
+    if (xinfo->lossless_xp)
+    {
+      if (! (*xinfo->codec_xp->decompress_data) (cinfo,
+					     main->xbuffer[main->whichptr]))
+        return;			/* suspension forced, can do nothing more */
+    }
+    else
+    {
+      if (! (*xinfo->coef_xp->decompress_data_xp) (cinfo,
+					     main->xbuffer[main->whichptr]))
+        return;			/* suspension forced, can do nothing more */
+    }
     main->buffer_full = TRUE;	/* OK, we have an iMCU row to work with */
     main->iMCU_row_ctr++;	/* count rows received */
   }

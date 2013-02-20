@@ -185,6 +185,16 @@ struct jpeg_d_post_controller_xp {
 				    JDIMENSION out_rows_avail));
 };
 
+/* Decompression codec (decompressor proper) -- lossless only */
+struct jpeg_d_codec_xp {
+  JMETHOD(void, calc_output_dimensions, (j_decompress_ptr cinfo));
+  JMETHOD(void, start_input_pass, (j_decompress_ptr cinfo));
+  JMETHOD(int, consume_data, (j_decompress_ptr cinfo));
+  JMETHOD(void, start_output_pass, (j_decompress_ptr cinfo));
+  JMETHOD(int, decompress_data, (j_decompress_ptr cinfo,
+				 JSAMPIMAGEXP output_buf));
+};
+
 /* Marker reading & parsing */
 struct jpeg_marker_reader_xp {
   JMETHOD(void, reset_marker_reader_xp, (j_decompress_ptr cinfo));
@@ -305,6 +315,8 @@ struct jpeg_color_quantizer_xp {
 #define jinit_huff_encoder	jIHEncoder
 #define jinit_phuff_encoder	jIPHEncoder
 #define jinit_marker_writer	jIMWriter
+#define jinit_d_codec_xp jIDCodecXp
+#define jinit_lossless_d_codec_xp jILosslsDXp
 #define jinit_master_decompress_xp	jIDMasterXp
 #define jinit_d_main_controller	jIDMainC
 #define jinit_d_coef_controller	jIDCoefC
@@ -347,6 +359,8 @@ EXTERN(void) jinit_huff_encoder_xp JPP((j_compress_ptr cinfo));
 EXTERN(void) jinit_phuff_encoder_xp JPP((j_compress_ptr cinfo));
 EXTERN(void) jinit_marker_writer_xp JPP((j_compress_ptr cinfo));
 /* Decompression module initialization routines */
+EXTERN(void) jinit_d_codec_xp JPP((j_decompress_ptr cinfo));
+EXTERN(void) jinit_lossless_d_codec_xp JPP((j_decompress_ptr cinfo));
 EXTERN(void) jinit_master_decompress_xp JPP((j_decompress_ptr cinfo));
 EXTERN(void) jinit_d_main_controller_xp JPP((j_decompress_ptr cinfo,
 					  boolean need_full_buffer));

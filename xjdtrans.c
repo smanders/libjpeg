@@ -46,6 +46,12 @@ GLOBAL(jvirt_barray_ptr *)
 jpeg_read_coefficients_xp (j_decompress_ptr cinfo)
 {
   j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
+  /* Can't read coefficients from lossless streams */
+  if (xinfo->lossless_xp) {
+    ERREXIT(cinfo, JERR_CANT_TRANSCODE);
+    return NULL;
+  }
+
   if (cinfo->global_state == DSTATE_READY) {
     /* First call: initialize active modules */
     transdecode_master_selection_xp(cinfo);
@@ -102,22 +108,30 @@ transdecode_master_selection_xp (j_decompress_ptr cinfo)
   /* This is effectively a buffered-image operation. */
   cinfo->buffered_image = TRUE;
 
-  /* Entropy decoding: either Huffman or arithmetic coding. */
-  if (cinfo->arith_code) {
-    ERREXIT(cinfo, JERR_ARITH_NOTIMPL);
-  } else {
-    if (cinfo->progressive_mode) {
-#ifdef D_PROGRESSIVE_SUPPORTED
-      jinit_phuff_decoder_xp(cinfo);
-#else
-      ERREXIT(cinfo, JERR_NOT_COMPILED);
-#endif
-    } else
-      jinit_huff_decoder_xp(cinfo);
+  if (xinfo->lossless_xp)
+  {
+    /* Initialize decompression codec */
+    jinit_d_codec_xp(cinfo);
   }
+  else
+  {
+    /* Entropy decoding: either Huffman or arithmetic coding. */
+    if (cinfo->arith_code) {
+      ERREXIT(cinfo, JERR_ARITH_NOTIMPL);
+    } else {
+      if (cinfo->progressive_mode) {
+#ifdef D_PROGRESSIVE_SUPPORTED
+        jinit_phuff_decoder_xp(cinfo);
+#else
+        ERREXIT(cinfo, JERR_NOT_COMPILED);
+#endif
+      } else
+        jinit_huff_decoder_xp(cinfo);
+    }
 
-  /* Always get a full-image coefficient buffer. */
-  jinit_d_coef_controller_xp(cinfo, TRUE);
+    /* Always get a full-image coefficient buffer. */
+    jinit_d_coef_controller_xp(cinfo, TRUE);
+  }
 
   /* We can now tell the memory manager to allocate virtual arrays. */
   (*cinfo->mem->realize_virt_arrays_xp) ((j_common_ptr) cinfo);

@@ -7,8 +7,9 @@
  *
  * This file contains input control logic for the JPEG decompressor.
  * These routines are concerned with controlling the decompressor's input
- * processing (marker reading and coefficient decoding).  The actual input
- * reading is done in jdmarker.c, jdhuff.c, and jdphuff.c.
+ * processing (marker reading and coefficient/difference decoding).
+ * The actual input reading is done in jdmarker.c, jdhuff.c, jdphuff.c,
+ * and jdlhuff.c.
  */
 
 #define JPEG_INTERNALS
@@ -49,9 +50,20 @@ initial_setup_xp (j_decompress_ptr cinfo)
       (long) cinfo->image_width > (long) JPEG_MAX_DIMENSION)
     ERREXIT1(cinfo, JERR_IMAGE_TOO_BIG, (unsigned int) JPEG_MAX_DIMENSION);
 
-  /* For now, precision must match compiled-in value... */
-  if (cinfo->data_precision != BITS_IN_JSAMPLE12)
-    ERREXIT1(cinfo, JERR_BAD_PRECISION, cinfo->data_precision);
+  if (xinfo->lossless_xp) {
+    /* If precision > defined value, we must downscale */
+    if (cinfo->data_precision > xinfo->bits_in_JSAMPLEXP)
+      WARNMS2(cinfo, JWRN_MUST_DOWNSCALE,
+	      cinfo->data_precision, xinfo->bits_in_JSAMPLEXP);
+    /* If precision is not between 9 and 16 bits, we don't (yet) support it */
+    if (cinfo->data_precision <= BITS_IN_JSAMPLE || cinfo->data_precision > BITS_IN_JSAMPLE16)
+      ERREXIT1(cinfo, JERR_BAD_LOSSLESS_PRECISION, cinfo->data_precision);
+  }
+  else {  /* Lossy processes */
+    /* For now, precision must match compiled-in value... */
+    if (cinfo->data_precision != BITS_IN_JSAMPLE12)
+      ERREXIT1(cinfo, JERR_BAD_PRECISION, cinfo->data_precision);
+  }
 
   /* Check that number of components won't exceed internal array sizes */
   if (cinfo->num_components > MAX_COMPONENTS)
@@ -72,23 +84,23 @@ initial_setup_xp (j_decompress_ptr cinfo)
 				   compptr->v_samp_factor);
   }
 
-  /* We initialize DCT_scaled_size and min_DCT_scaled_size to DCTSIZE.
+  /* We initialize DCT_scaled_size and min_DCT_scaled_size to data_unit.
    * In the full decompressor, this will be overridden by jdmaster.c;
    * but in the transcoder, jdmaster.c is not used, so we must do it here.
    */
-  cinfo->min_DCT_scaled_size = DCTSIZE;
+  cinfo->min_DCT_scaled_size = xinfo->data_unit_xp;
 
   /* Compute dimensions of components */
   for (ci = 0, compptr = cinfo->comp_info; ci < cinfo->num_components;
        ci++, compptr++) {
-    compptr->DCT_scaled_size = DCTSIZE;
-    /* Size in DCT blocks */
+    compptr->DCT_scaled_size = xinfo->data_unit_xp;
+    /* Size in data units */
     compptr->width_in_blocks = (JDIMENSION)
       jdiv_round_up((long) cinfo->image_width * (long) compptr->h_samp_factor,
-		    (long) (cinfo->max_h_samp_factor * DCTSIZE));
+		    (long) (cinfo->max_h_samp_factor * xinfo->data_unit_xp));
     compptr->height_in_blocks = (JDIMENSION)
       jdiv_round_up((long) cinfo->image_height * (long) compptr->v_samp_factor,
-		    (long) (cinfo->max_v_samp_factor * DCTSIZE));
+		    (long) (cinfo->max_v_samp_factor * xinfo->data_unit_xp));
     /* downsampled_width and downsampled_height will also be overridden by
      * jdmaster.c if we are doing full decompression.  The transcoder library
      * doesn't use these values, but the calling application might.
@@ -109,7 +121,7 @@ initial_setup_xp (j_decompress_ptr cinfo)
   /* Compute number of fully interleaved MCU rows. */
   cinfo->total_iMCU_rows = (JDIMENSION)
     jdiv_round_up((long) cinfo->image_height,
-		  (long) (cinfo->max_v_samp_factor*DCTSIZE));
+		  (long) (cinfo->max_v_samp_factor*xinfo->data_unit_xp));
 
   /* Decide whether file contains multiple scans */
   if (cinfo->comps_in_scan < cinfo->num_components || cinfo->progressive_mode)
@@ -164,10 +176,10 @@ per_scan_setup_xp (j_decompress_ptr cinfo)
     /* Overall image size in MCUs */
     cinfo->MCUs_per_row = (JDIMENSION)
       jdiv_round_up((long) cinfo->image_width,
-		    (long) (cinfo->max_h_samp_factor*DCTSIZE));
+		    (long) (cinfo->max_h_samp_factor*xinfo->data_unit_xp));
     cinfo->MCU_rows_in_scan = (JDIMENSION)
       jdiv_round_up((long) cinfo->image_height,
-		    (long) (cinfo->max_v_samp_factor*DCTSIZE));
+		    (long) (cinfo->max_v_samp_factor*xinfo->data_unit_xp));
     
     cinfo->blocks_in_MCU = 0;
     
@@ -258,10 +270,18 @@ start_input_pass_xp (j_decompress_ptr cinfo)
 {
   j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
   per_scan_setup_xp(cinfo);
-  latch_quant_tables_xp(cinfo);
-  (*xinfo->entropy_xp->start_pass_xp) (cinfo);
-  (*xinfo->coef_xp->start_input_pass_xp) (cinfo);
-  xinfo->inputctl_xp->consume_input_xp = xinfo->coef_xp->consume_data_xp;
+  if (xinfo->lossless_xp)
+  {
+    (*xinfo->codec_xp->start_input_pass) (cinfo);
+    xinfo->inputctl_xp->consume_input_xp = xinfo->codec_xp->consume_data;
+  }
+  else
+  {
+    latch_quant_tables_xp(cinfo);
+    (*xinfo->entropy_xp->start_pass_xp) (cinfo);
+    (*xinfo->coef_xp->start_input_pass_xp) (cinfo);
+    xinfo->inputctl_xp->consume_input_xp = xinfo->coef_xp->consume_data_xp;
+  }
 }
 
 
@@ -305,6 +325,14 @@ consume_markers_xp (j_decompress_ptr cinfo)
   case JPEG_REACHED_SOS:	/* Found SOS */
     if (inputctl->inheaders) {	/* 1st SOS */
       initial_setup_xp(cinfo);
+      if (xinfo->lossless_xp) {
+        /*
+         * Initialize the decompression codec.  We need to do this here so that
+         * any codec-specific fields and function pointers are available to
+         * the rest of the library.
+         */
+        jinit_d_codec_xp(cinfo);
+      }
       inputctl->inheaders = FALSE;
       /* Note: start_input_pass must be called by jdmaster.c
        * before any more input can be consumed.  jdapimin.c is

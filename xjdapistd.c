@@ -211,8 +211,16 @@ jpeg_read_raw_data_xp (j_decompress_ptr cinfo, JSAMPIMAGEXP data,
     ERREXIT(cinfo, JERR_BUFFER_SIZE);
 
   /* Decompress directly into user's buffer. */
-  if (! (*xinfo->coef_xp->decompress_data_xp) (cinfo, data))
-    return 0;			/* suspension forced, can do nothing more */
+  if (xinfo->lossless_xp)
+  {
+    if (! (*xinfo->codec_xp->decompress_data) (cinfo, data))
+      return 0;			/* suspension forced, can do nothing more */
+  }
+  else
+  {
+    if (! (*xinfo->coef_xp->decompress_data_xp) (cinfo, data))
+      return 0;			/* suspension forced, can do nothing more */
+  }
 
   /* OK, we processed one iMCU row. */
   cinfo->output_scanline += lines_per_iMCU_row;

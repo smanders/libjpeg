@@ -39,7 +39,20 @@ typedef enum {
 
 JMESSAGE(JMSG_FIRSTADDONCODE=1000, NULL) /* Must be first entry! */
 
-JMESSAGE(JERR_ADD_ON_MSG, "This is an add-on message")
+JMESSAGE(JERR_BAD_DIFF, "spatial difference out of range")
+JMESSAGE(JERR_BAD_LOSSLESS,
+	 "Invalid lossless parameters Ss=%d Se=%d Ah=%d Al=%d")
+JMESSAGE(JERR_BAD_LOSSLESS_SCRIPT,
+	 "Invalid lossless parameters at scan script entry %d")
+JMESSAGE(JERR_BAD_RESTART, "Invalid restart interval: %d, must be an integer multiple of the number of MCUs in an MCU_row (%d)")
+JMESSAGE(JERR_CANT_TRANSCODE,
+	 "Cannot transcode to/from lossless JPEG datastreams")
+JMESSAGE(JERR_NO_LOSSLESS_SCRIPT, "Lossless encoding was requested but no scan script was supplied")
+JMESSAGE(JTRC_UNKNOWN_LOSSLESS_IDS,
+	 "Unrecognized component IDs %d %d %d, assuming RGB")
+JMESSAGE(JWRN_MUST_DOWNSCALE,
+	 "Must downscale data from %d bits to %d")
+JMESSAGE(JERR_BAD_LOSSLESS_PRECISION, "Unsupported lossless JPEG data precision %d")
 
 #ifdef JMAKE_ENUM_LIST
 

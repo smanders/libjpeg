@@ -53,6 +53,8 @@ typedef jpeg_compress_struct_xp * j_compress_ptr_xp;
 typedef struct {
   struct jpeg_source_mgr_xp * src_xp;   /* Source of compressed data */
   JSAMPARRAYXP colormap_xp;		/* The color map as a 2-D pixel array */
+  boolean lossless_xp;		/* TRUE=lossless encoding, FALSE=lossy */
+  int data_unit_xp;		/* size of data unit in samples */
   JSAMPLEXP * sample_range_limit_xp;    /* table for fast range-limiting */
   int bits_in_JSAMPLEXP;
   JSAMPLEXP max_JSAMPLEXP;
@@ -62,6 +64,7 @@ typedef struct {
    */
   struct jpeg_decomp_master_xp * master_xp;
   struct jpeg_d_main_controller_xp * main_xp;
+  struct jpeg_d_codec_xp * codec_xp; // used for lossless decoding only
   struct jpeg_d_coef_controller_xp * coef_xp;
   struct jpeg_d_post_controller_xp * post_xp;
   struct jpeg_input_controller_xp * inputctl_xp;

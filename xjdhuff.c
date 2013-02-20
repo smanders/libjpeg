@@ -5,7 +5,8 @@
  * This file is part of the Independent JPEG Group's software.
  * For conditions of distribution and use, see the accompanying README file.
  *
- * This file contains Huffman entropy decoding routines.
+ * This file contains Huffman entropy decoding routines which are shared
+ * by the sequential, progressive and lossless decoders.
  *
  * Much of the complexity here has to do with supporting input suspension.
  * If the data source module demands suspension, we want to be able to back
@@ -17,6 +18,7 @@
 #define JPEG_INTERNALS
 #include "jinclude.h"
 #include "xjpeglib.h"
+#include "jlossls.h"		/* Private declarations for lossless codec */
 #include "xjdhuff.h"		/* Declarations shared with jdphuff.c */
 
 
@@ -253,14 +255,14 @@ jpeg_make_d_derived_tbl_xp (j_decompress_ptr cinfo, boolean isDC, int tblno,
 
   /* Validate symbols as being reasonable.
    * For AC tables, we make no check, but accept all byte values 0..255.
-   * For DC tables, we require the symbols to be in range 0..15.
+   * For DC tables, we require the symbols to be in range 0..16.
    * (Tighter bounds could be applied depending on the data depth and mode,
    * but this is sufficient to ensure safe decoding.)
    */
   if (isDC) {
     for (i = 0; i < numsymbols; i++) {
       int sym = htbl->huffval[i];
-      if (sym < 0 || sym > 15)
+      if (sym < 0 || sym > 16)
 	ERREXIT(cinfo, JERR_BAD_HUFF_TABLE);
     }
   }
@@ -371,9 +373,17 @@ jpeg_fill_bit_buffer_xp (bitread_working_state_xp * state,
        * We use a nonvolatile flag to ensure that only one warning message
        * appears per data segment.
        */
-      if (! xinfo->entropy_xp->insufficient_data) {
-	WARNMS(cinfo, JWRN_HIT_MARKER);
-	xinfo->entropy_xp->insufficient_data = TRUE;
+      if (xinfo->lossless_xp) {
+        huffd_common_ptr huffd;
+        huffd = (huffd_common_ptr) ((j_lossless_d_ptr_xp) xinfo->codec_xp)->entropy_private;
+        if (! huffd->insufficient_data) {
+          WARNMS(cinfo, JWRN_HIT_MARKER);
+          huffd->insufficient_data = TRUE;
+        }
+      }
+      else if (! xinfo->entropy_xp->insufficient_data) {
+        WARNMS(cinfo, JWRN_HIT_MARKER);
+        xinfo->entropy_xp->insufficient_data = TRUE;
       }
       /* Fill the buffer with zero bits */
       get_buffer <<= MIN_GET_BITS - bits_left;

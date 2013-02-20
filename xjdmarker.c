@@ -234,8 +234,16 @@ get_soi_xp (j_decompress_ptr cinfo)
 }
 
 
+/* Known codec processes. */
+typedef enum {
+	JPROC_SEQUENTIAL,	/* baseline/extended sequential DCT */
+	JPROC_PROGRESSIVE,	/* progressive DCT */
+	JPROC_LOSSLESS		/* lossless (sequential) */
+} J_CODEC_PROCESS;
+
 LOCAL(boolean)
-get_sof_xp (j_decompress_ptr cinfo, boolean is_prog, boolean is_arith)
+get_sof_xp (j_decompress_ptr cinfo, J_CODEC_PROCESS process, boolean is_arith,
+	 int data_unit)
 /* Process a SOFn marker */
 {
   j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
@@ -244,8 +252,10 @@ get_sof_xp (j_decompress_ptr cinfo, boolean is_prog, boolean is_arith)
   jpeg_component_info * compptr;
   INPUT_VARS(xinfo);
 
-  cinfo->progressive_mode = is_prog;
+  xinfo->data_unit_xp = data_unit;
+  cinfo->progressive_mode = JPROC_PROGRESSIVE == process;
   cinfo->arith_code = is_arith;
+  xinfo->lossless_xp = JPROC_LOSSLESS == process;
 
   INPUT_2BYTES(cinfo, length, return FALSE);
 
@@ -297,6 +307,14 @@ get_sof_xp (j_decompress_ptr cinfo, boolean is_prog, boolean is_arith)
   xinfo->bits_in_JSAMPLEXP = BITS_IN_JSAMPLE12;
   xinfo->max_JSAMPLEXP = MAXJSAMPLE12;
   xinfo->center_JSAMPLEXP = CENTERJSAMPLE12;
+  if (xinfo->lossless_xp && cinfo->data_precision > BITS_IN_JSAMPLE &&
+    cinfo->data_precision <= BITS_IN_JSAMPLE16)
+  {
+    xinfo->bits_in_JSAMPLEXP = cinfo->data_precision;
+    xinfo->max_JSAMPLEXP = (1 << cinfo->data_precision) - 1;
+    xinfo->center_JSAMPLEXP = 1 << (cinfo->data_precision - 1);
+  }
+
   INPUT_SYNC(cinfo);
   return TRUE;
 }
@@ -992,32 +1010,40 @@ read_markers_xp (j_decompress_ptr cinfo)
 
     case M_SOF0:		/* Baseline */
     case M_SOF1:		/* Extended sequential, Huffman */
-      if (! get_sof_xp(cinfo, FALSE, FALSE))
+      if (! get_sof_xp(cinfo, JPROC_SEQUENTIAL, FALSE, DCTSIZE))
 	return JPEG_SUSPENDED;
       break;
 
     case M_SOF2:		/* Progressive, Huffman */
-      if (! get_sof_xp(cinfo, TRUE, FALSE))
+      if (! get_sof_xp(cinfo, JPROC_PROGRESSIVE, FALSE, DCTSIZE))
+	return JPEG_SUSPENDED;
+      break;
+
+    case M_SOF3:		/* Lossless, Huffman */
+      if (! get_sof_xp(cinfo, JPROC_LOSSLESS, FALSE, 1))
 	return JPEG_SUSPENDED;
       break;
 
     case M_SOF9:		/* Extended sequential, arithmetic */
-      if (! get_sof_xp(cinfo, FALSE, TRUE))
+      if (! get_sof_xp(cinfo, JPROC_SEQUENTIAL, TRUE, DCTSIZE))
 	return JPEG_SUSPENDED;
       break;
 
     case M_SOF10:		/* Progressive, arithmetic */
-      if (! get_sof_xp(cinfo, TRUE, TRUE))
+      if (! get_sof_xp(cinfo, JPROC_PROGRESSIVE, TRUE, DCTSIZE))
+	return JPEG_SUSPENDED;
+      break;
+
+    case M_SOF11:		/* Lossless, arithmetic */
+      if (! get_sof_xp(cinfo, JPROC_LOSSLESS, TRUE, 1))
 	return JPEG_SUSPENDED;
       break;
 
     /* Currently unsupported SOFn types */
-    case M_SOF3:		/* Lossless, Huffman */
     case M_SOF5:		/* Differential sequential, Huffman */
     case M_SOF6:		/* Differential progressive, Huffman */
     case M_SOF7:		/* Differential lossless, Huffman */
     case M_JPG:			/* Reserved for JPEG extensions */
-    case M_SOF11:		/* Lossless, arithmetic */
     case M_SOF13:		/* Differential sequential, arithmetic */
     case M_SOF14:		/* Differential progressive, arithmetic */
     case M_SOF15:		/* Differential lossless, arithmetic */

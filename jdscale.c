@@ -12,9 +12,10 @@
 
 #define JPEG_INTERNALS
 #include "jinclude.h"
-#include "jpeglib.h"
+#include "xjpeglib.h"
 #include "jlossls.h"		/* Private declarations for lossless codec */
 
+#define D_LOSSLESS_SUPPORTED
 
 #ifdef D_LOSSLESS_SUPPORTED
 
@@ -35,48 +36,51 @@ typedef scaler * scaler_ptr;
 
 METHODDEF(void)
 simple_upscale(j_decompress_ptr cinfo,
-	       JDIFFROW diff_buf, JSAMPROW output_buf,
+	       JDIFFROW diff_buf, JSAMPROWXP output_buf,
 	       JDIMENSION width)
 {
-  j_lossless_d_ptr losslsd = (j_lossless_d_ptr) cinfo->codec;
+  j_lossless_d_ptr_xp losslsd =
+    (j_lossless_d_ptr_xp) ((j_decompress_ptr_xp) cinfo->client_data)->codec_xp;
   scaler_ptr scaler = (scaler_ptr) losslsd->scaler_private;
   int scale_factor = scaler->scale_factor;
-  int xindex;
+  JDIMENSION xindex;
 
   for (xindex = 0; xindex < width; xindex++)
-    output_buf[xindex] = (JSAMPLE) (diff_buf[xindex] << scale_factor);
+    output_buf[xindex] = (JSAMPLEXP) (diff_buf[xindex] << scale_factor);
 }
 
 METHODDEF(void)
 simple_downscale(j_decompress_ptr cinfo,
-		 JDIFFROW diff_buf, JSAMPROW output_buf,
+		 JDIFFROW diff_buf, JSAMPROWXP output_buf,
 		 JDIMENSION width)
 {
-  j_lossless_d_ptr losslsd = (j_lossless_d_ptr) cinfo->codec;
+  j_lossless_d_ptr_xp losslsd =
+    (j_lossless_d_ptr_xp) ((j_decompress_ptr_xp) cinfo->client_data)->codec_xp;
   scaler_ptr scaler = (scaler_ptr) losslsd->scaler_private;
   int scale_factor = scaler->scale_factor;
-  int xindex;
+  JDIMENSION xindex;
 
   for (xindex = 0; xindex < width; xindex++)
-    output_buf[xindex] = (JSAMPLE) RIGHT_SHIFT(diff_buf[xindex], scale_factor);
+    output_buf[xindex] = (JSAMPLEXP) RIGHT_SHIFT(diff_buf[xindex], scale_factor);
 }
 
 METHODDEF(void)
 noscale(j_decompress_ptr cinfo,
-	JDIFFROW diff_buf, JSAMPROW output_buf,
+	JDIFFROW diff_buf, JSAMPROWXP output_buf,
 	JDIMENSION width)
 {
-  int xindex;
+  JDIMENSION xindex;
 
   for (xindex = 0; xindex < width; xindex++)
-    output_buf[xindex] = (JSAMPLE) diff_buf[xindex];
+    output_buf[xindex] = (JSAMPLEXP) diff_buf[xindex];
 }
 
 
 METHODDEF(void)
 scaler_start_pass (j_decompress_ptr cinfo)
 {
-  j_lossless_d_ptr losslsd = (j_lossless_d_ptr) cinfo->codec;
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
+  j_lossless_d_ptr_xp losslsd = (j_lossless_d_ptr_xp) xinfo->codec_xp;
   scaler_ptr scaler = (scaler_ptr) losslsd->scaler_private;
   int downscale;
 
@@ -84,8 +88,8 @@ scaler_start_pass (j_decompress_ptr cinfo)
    * Downscale by the difference in the input vs. output precision.  If the
    * output precision >= input precision, then do not downscale.
    */
-  downscale = BITS_IN_JSAMPLE < cinfo->data_precision ?
-    cinfo->data_precision - BITS_IN_JSAMPLE : 0;
+  downscale = xinfo->bits_in_JSAMPLEXP < cinfo->data_precision ?
+    cinfo->data_precision - xinfo->bits_in_JSAMPLEXP : 0;
 
   scaler->scale_factor = cinfo->Al - downscale;
 
@@ -104,7 +108,8 @@ scaler_start_pass (j_decompress_ptr cinfo)
 GLOBAL(void)
 jinit_d_scaler (j_decompress_ptr cinfo)
 {
-  j_lossless_d_ptr losslsd = (j_lossless_d_ptr) cinfo->codec;
+  j_lossless_d_ptr_xp losslsd =
+    (j_lossless_d_ptr_xp) ((j_decompress_ptr_xp) cinfo->client_data)->codec_xp;
   scaler_ptr scaler;
 
   scaler = (scaler_ptr)

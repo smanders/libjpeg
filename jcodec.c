@@ -10,28 +10,8 @@
 
 #define JPEG_INTERNALS
 #include "jinclude.h"
-#include "jpeglib.h"
-#include "jlossy.h"
+#include "xjpeglib.h"
 #include "jlossls.h"
-
-
-/*
- * Initialize the compression codec.
- * This is called only once, during master selection.
- */
-
-GLOBAL(void)
-jinit_c_codec (j_compress_ptr cinfo)
-{
-  if (cinfo->process == JPROC_LOSSLESS) {
-#ifdef C_LOSSLESS_SUPPORTED
-    jinit_lossless_c_codec(cinfo);
-#else
-    ERREXIT(cinfo, JERR_NOT_COMPILED);
-#endif
-  } else
-    jinit_lossy_c_codec(cinfo);
-}
 
 
 /*
@@ -40,14 +20,15 @@ jinit_c_codec (j_compress_ptr cinfo)
  */
 
 GLOBAL(void)
-jinit_d_codec (j_decompress_ptr cinfo)
+jinit_d_codec_xp (j_decompress_ptr cinfo)
 {
-  if (cinfo->process == JPROC_LOSSLESS) {
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
+  if (xinfo->lossless_xp) {
 #ifdef D_LOSSLESS_SUPPORTED
-    jinit_lossless_d_codec(cinfo);
+    jinit_lossless_d_codec_xp(cinfo);
 #else
     ERREXIT(cinfo, JERR_NOT_COMPILED);
 #endif
   } else
-    jinit_lossy_d_codec(cinfo);
+    ERREXIT(cinfo, JERR_NOT_COMPILED);
 }

@@ -20,8 +20,9 @@
 
 #define JPEG_INTERNALS
 #include "jinclude.h"
-#include "jpeglib.h"
+#include "xjpeglib.h"
 #include "jlossls.h"		/* Private declarations for lossless codec */
+#include "xjerror.h"
 
 
 #ifdef D_LOSSLESS_SUPPORTED
@@ -46,7 +47,7 @@
 */
 
 #define UNDIFFERENCE_1D(INITIAL_PREDICTOR) \
-	int xindex; \
+	JDIMENSION xindex; \
 	int Ra; \
  \
 	Ra = (diff_buf[0] + INITIAL_PREDICTOR) & 0xFFFF; \
@@ -73,7 +74,7 @@
  */
 
 #define UNDIFFERENCE_2D(PREDICTOR) \
-	int xindex; \
+	JDIMENSION xindex; \
 	int Ra, Rb, Rc; \
  \
 	Rb = GETJSAMPLE(prev_row[0]); \
@@ -164,7 +165,8 @@ jpeg_undifference_first_row(j_decompress_ptr cinfo, int comp_index,
 			    JDIFFROW diff_buf, JDIFFROW prev_row,
 			    JDIFFROW undiff_buf, JDIMENSION width)
 {
-  j_lossless_d_ptr losslsd = (j_lossless_d_ptr) cinfo->codec;
+  j_lossless_d_ptr_xp losslsd =
+    (j_lossless_d_ptr_xp) ((j_decompress_ptr_xp) cinfo->client_data)->codec_xp;
 
   UNDIFFERENCE_1D(INITIAL_PREDICTORx);
 
@@ -206,7 +208,8 @@ jpeg_undifference_first_row(j_decompress_ptr cinfo, int comp_index,
 METHODDEF(void)
 predict_start_pass (j_decompress_ptr cinfo)
 {
-  j_lossless_d_ptr losslsd = (j_lossless_d_ptr) cinfo->codec;
+  j_lossless_d_ptr_xp losslsd =
+    (j_lossless_d_ptr_xp) ((j_decompress_ptr_xp) cinfo->client_data)->codec_xp;
   int ci;
 
   /* Check that the scan parameters Ss, Se, Ah, Al are OK for lossless JPEG.
@@ -237,7 +240,8 @@ predict_start_pass (j_decompress_ptr cinfo)
 GLOBAL(void)
 jinit_undifferencer (j_decompress_ptr cinfo)
 {
-  j_lossless_d_ptr losslsd = (j_lossless_d_ptr) cinfo->codec;
+  j_lossless_d_ptr_xp losslsd =
+    (j_lossless_d_ptr_xp) ((j_decompress_ptr_xp) cinfo->client_data)->codec_xp;
 
   losslsd->predict_start_pass = predict_start_pass;
   losslsd->predict_process_restart = predict_start_pass;

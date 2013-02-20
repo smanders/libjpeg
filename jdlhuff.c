@@ -16,9 +16,9 @@
 
 #define JPEG_INTERNALS
 #include "jinclude.h"
-#include "jpeglib.h"
+#include "xjpeglib.h"
 #include "jlossls.h"		/* Private declarations for lossless codec */
-#include "jdhuff.h"		/* Declarations shared with jd*huff.c */
+#include "xjdhuff.h"		/* Declarations shared with jd*huff.c */
 
 
 #ifdef D_LOSSLESS_SUPPORTED
@@ -40,12 +40,12 @@ typedef struct {
   /* Precalculated info set up by start_pass for use in decode_mcus: */
 
   /* Pointers to derived tables to be used for each data unit within an MCU */
-  d_derived_tbl * cur_tbls[D_MAX_DATA_UNITS_IN_MCU];
+  d_derived_tbl * cur_tbls[D_MAX_BLOCKS_IN_MCU];
 
   /* Pointers to the proper output difference row for each group of data units
    * within an MCU.  For each component, there are Vi groups of Hi data units.
    */
-  JDIFFROW output_ptr[D_MAX_DATA_UNITS_IN_MCU];
+  JDIFFROW output_ptr[D_MAX_BLOCKS_IN_MCU];
 
   /* Number of output pointers in use for the current MCU.  This is the sum
    * of all Vi in the MCU.
@@ -55,10 +55,10 @@ typedef struct {
   /* Information used for positioning the output pointers within the output
    * difference rows.
    */
-  lhd_output_ptr_info output_ptr_info[D_MAX_DATA_UNITS_IN_MCU];
+  lhd_output_ptr_info output_ptr_info[D_MAX_BLOCKS_IN_MCU];
 
   /* Index of the proper output pointer for each data unit within an MCU */
-  int output_ptr_index[D_MAX_DATA_UNITS_IN_MCU];
+  int output_ptr_index[D_MAX_BLOCKS_IN_MCU];
 
 } lhuff_entropy_decoder;
 
@@ -72,7 +72,8 @@ typedef lhuff_entropy_decoder * lhuff_entropy_ptr;
 METHODDEF(void)
 start_pass_lhuff_decoder (j_decompress_ptr cinfo)
 {
-  j_lossless_d_ptr losslsd = (j_lossless_d_ptr) cinfo->codec;
+  j_lossless_d_ptr_xp losslsd =
+    (j_lossless_d_ptr_xp) ((j_decompress_ptr_xp) cinfo->client_data)->codec_xp;
   lhuff_entropy_ptr entropy = (lhuff_entropy_ptr) losslsd->entropy_private;
   int ci, dctbl, sampn, ptrn, yoffset, xoffset;
   jpeg_component_info * compptr;
@@ -86,12 +87,12 @@ start_pass_lhuff_decoder (j_decompress_ptr cinfo)
       ERREXIT1(cinfo, JERR_NO_HUFF_TABLE, dctbl);
     /* Compute derived values for Huffman tables */
     /* We may do this more than once for a table, but it's not expensive */
-    jpeg_make_d_derived_tbl(cinfo, TRUE, dctbl,
+    jpeg_make_d_derived_tbl_xp(cinfo, TRUE, dctbl,
 			    & entropy->derived_tbls[dctbl]);
   }
 
   /* Precalculate decoding info for each sample in an MCU of this scan */
-  for (sampn = 0, ptrn = 0; sampn < cinfo->data_units_in_MCU;) {
+  for (sampn = 0, ptrn = 0; sampn < cinfo->blocks_in_MCU;) {
     compptr = cinfo->cur_comp_info[cinfo->MCU_membership[sampn]];
     ci = compptr->component_index;
     for (yoffset = 0; yoffset < compptr->MCU_height; yoffset++, ptrn++) {
@@ -150,17 +151,17 @@ static const int extend_offset[16] = /* entry n is (-1 << n) + 1 */
 METHODDEF(boolean)
 process_restart (j_decompress_ptr cinfo)
 {
-  j_lossless_d_ptr losslsd = (j_lossless_d_ptr) cinfo->codec;
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
+  j_lossless_d_ptr_xp losslsd = (j_lossless_d_ptr_xp) xinfo->codec_xp;
   lhuff_entropy_ptr entropy = (lhuff_entropy_ptr) losslsd->entropy_private;
-  int ci;
 
   /* Throw away any unused bits remaining in bit buffer; */
   /* include any full bytes in next_marker's count of discarded bytes */
-  cinfo->marker->discarded_bytes += entropy->bitstate.bits_left / 8;
+  xinfo->marker_xp->discarded_bytes += entropy->bitstate.bits_left / 8;
   entropy->bitstate.bits_left = 0;
 
   /* Advance past the RSTn marker */
-  if (! (*cinfo->marker->read_restart_marker) (cinfo))
+  if (! (*xinfo->marker_xp->read_restart_marker) (cinfo))
     return FALSE;
 
   /* Reset out-of-data flag, unless read_restart_marker left us smack up
@@ -194,9 +195,11 @@ METHODDEF(JDIMENSION)
 decode_mcus (j_decompress_ptr cinfo, JDIFFIMAGE diff_buf,
 	     JDIMENSION MCU_row_num, JDIMENSION MCU_col_num, JDIMENSION nMCU)
 {
-  j_lossless_d_ptr losslsd = (j_lossless_d_ptr) cinfo->codec;
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
+  j_lossless_d_ptr_xp losslsd = (j_lossless_d_ptr_xp) xinfo->codec_xp;
   lhuff_entropy_ptr entropy = (lhuff_entropy_ptr) losslsd->entropy_private;
-  int mcu_num, sampn, ci, yoffset, MCU_width, ptrn;
+  JDIMENSION mcu_num;
+  int sampn, ci, yoffset, MCU_width, ptrn;
   BITREAD_STATE_VARS;
 
   /* Set output pointer locations based on MCU_col_num */
@@ -233,12 +236,12 @@ decode_mcus (j_decompress_ptr cinfo, JDIFFIMAGE diff_buf,
     for (mcu_num = 0; mcu_num < nMCU; mcu_num++) {
 
       /* Inner loop handles the samples in the MCU */
-      for (sampn = 0; sampn < cinfo->data_units_in_MCU; sampn++) {
+      for (sampn = 0; sampn < cinfo->blocks_in_MCU; sampn++) {
 	d_derived_tbl * dctbl = entropy->cur_tbls[sampn];
 	register int s, r;
 
 	/* Section H.2.2: decode the sample difference */
-	HUFF_DECODE(s, br_state, dctbl, return mcu_num, label1);
+	HUFF_DECODE_XP(s, br_state, dctbl, return mcu_num, label1);
 	if (s) {
 	  if (s == 16)	/* special case: always output 32768 */
 	    s = 32768;
@@ -269,7 +272,8 @@ decode_mcus (j_decompress_ptr cinfo, JDIFFIMAGE diff_buf,
 GLOBAL(void)
 jinit_lhuff_decoder (j_decompress_ptr cinfo)
 {
-  j_lossless_d_ptr losslsd = (j_lossless_d_ptr) cinfo->codec;
+  j_lossless_d_ptr_xp losslsd =
+    (j_lossless_d_ptr_xp) ((j_decompress_ptr_xp) cinfo->client_data)->codec_xp;
   lhuff_entropy_ptr entropy;
   int i;
 

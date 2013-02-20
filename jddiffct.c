@@ -17,8 +17,9 @@
 
 #define JPEG_INTERNALS
 #include "jinclude.h"
-#include "jpeglib.h"
+#include "xjpeglib.h"
 #include "jlossls.h"
+#include "xjerror.h"
 
 
 #ifdef D_LOSSLESS_SUPPORTED
@@ -48,10 +49,10 @@ typedef d_diff_controller * d_diff_ptr;
 
 /* Forward declarations */
 METHODDEF(int) decompress_data
-	JPP((j_decompress_ptr cinfo, JSAMPIMAGE output_buf));
+	JPP((j_decompress_ptr cinfo, JSAMPIMAGEXP output_buf));
 #ifdef D_MULTISCAN_FILES_SUPPORTED
 METHODDEF(int) output_data
-	JPP((j_decompress_ptr cinfo, JSAMPIMAGE output_buf));
+	JPP((j_decompress_ptr cinfo, JSAMPIMAGEXP output_buf));
 #endif
 
 
@@ -59,7 +60,8 @@ LOCAL(void)
 start_iMCU_row (j_decompress_ptr cinfo)
 /* Reset within-iMCU-row counters for a new row (input side) */
 {
-  j_lossless_d_ptr losslsd = (j_lossless_d_ptr) cinfo->codec;
+  j_lossless_d_ptr_xp losslsd =
+    (j_lossless_d_ptr_xp) ((j_decompress_ptr_xp) cinfo->client_data)->codec_xp;
   d_diff_ptr diff = (d_diff_ptr) losslsd->diff_private;
 
   /* In an interleaved scan, an MCU row is the same as an iMCU row.
@@ -87,7 +89,8 @@ start_iMCU_row (j_decompress_ptr cinfo)
 METHODDEF(void)
 start_input_pass (j_decompress_ptr cinfo)
 {
-  j_lossless_d_ptr losslsd = (j_lossless_d_ptr) cinfo->codec;
+  j_lossless_d_ptr_xp losslsd =
+    (j_lossless_d_ptr_xp) ((j_decompress_ptr_xp) cinfo->client_data)->codec_xp;
   d_diff_ptr diff = (d_diff_ptr) losslsd->diff_private;
 
   /* Check that the restart interval is an integer multiple of the number 
@@ -113,7 +116,8 @@ start_input_pass (j_decompress_ptr cinfo)
 METHODDEF(boolean)
 process_restart (j_decompress_ptr cinfo)
 {
-  j_lossless_d_ptr losslsd = (j_lossless_d_ptr) cinfo->codec;
+  j_lossless_d_ptr_xp losslsd =
+    (j_lossless_d_ptr_xp) ((j_decompress_ptr_xp) cinfo->client_data)->codec_xp;
   d_diff_ptr diff = (d_diff_ptr) losslsd->diff_private;
 
   if (! (*losslsd->entropy_process_restart) (cinfo))
@@ -150,14 +154,16 @@ start_output_pass (j_decompress_ptr cinfo)
  */
 
 METHODDEF(int)
-decompress_data (j_decompress_ptr cinfo, JSAMPIMAGE output_buf)
+decompress_data (j_decompress_ptr cinfo, JSAMPIMAGEXP output_buf)
 {
-  j_lossless_d_ptr losslsd = (j_lossless_d_ptr) cinfo->codec;
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
+  j_lossless_d_ptr_xp losslsd = (j_lossless_d_ptr_xp) xinfo->codec_xp;
   d_diff_ptr diff = (d_diff_ptr) losslsd->diff_private;
   JDIMENSION MCU_col_num;	/* index of current MCU within row */
   JDIMENSION MCU_count;		/* number of MCUs decoded */
   JDIMENSION last_iMCU_row = cinfo->total_iMCU_rows - 1;
-  int comp, ci, yoffset, row, prev_row;
+  unsigned int yoffset;
+  int comp, ci, row, prev_row;
   jpeg_component_info *compptr;
 
   /* Loop to process as much as one whole iMCU row */
@@ -207,10 +213,10 @@ decompress_data (j_decompress_ptr cinfo, JSAMPIMAGE output_buf)
 					    diff->diff_buf[ci][row],
 					    diff->undiff_buf[ci][prev_row],
 					    diff->undiff_buf[ci][row],
-					    compptr->width_in_data_units);
+					    compptr->width_in_blocks);
       (*losslsd->scaler_scale) (cinfo, diff->undiff_buf[ci][row],
 				output_buf[ci][row],
-				compptr->width_in_data_units);
+				compptr->width_in_blocks);
     }
   }
 
@@ -225,7 +231,7 @@ decompress_data (j_decompress_ptr cinfo, JSAMPIMAGE output_buf)
     return JPEG_ROW_COMPLETED;
   }
   /* Completed the scan */
-  (*cinfo->inputctl->finish_input_pass) (cinfo);
+  (*xinfo->inputctl_xp->finish_input_pass_xp) (cinfo);
   return JPEG_SCAN_COMPLETED;
 }
 
@@ -253,20 +259,19 @@ dummy_consume_data (j_decompress_ptr cinfo)
 METHODDEF(int)
 consume_data (j_decompress_ptr cinfo)
 {
-  j_lossless_d_ptr losslsd = (j_lossless_d_ptr) cinfo->codec;
+  j_lossless_d_ptr_xp losslsd =
+    (j_lossless_d_ptr_xp) ((j_decompress_ptr_xp) cinfo->client_data)->codec_xp;
   d_diff_ptr diff = (d_diff_ptr) losslsd->diff_private;
-  JDIMENSION MCU_col_num;	/* index of current MCU within row */
-  JDIMENSION MCU_count;		/* number of MCUs decoded */
   JDIMENSION last_iMCU_row = cinfo->total_iMCU_rows - 1;
-  int comp, ci, yoffset, row, prev_row;
-  JSAMPARRAY buffer[MAX_COMPS_IN_SCAN];
+  int comp, ci;
+  JSAMPARRAYXP buffer[MAX_COMPS_IN_SCAN];
   jpeg_component_info *compptr;
 
   /* Align the virtual buffers for the components used in this scan. */
   for (comp = 0; comp < cinfo->comps_in_scan; comp++) {
     compptr = cinfo->cur_comp_info[comp];
     ci = compptr->component_index;
-    buffer[ci] = (*cinfo->mem->access_virt_sarray)
+    buffer[ci] = (*cinfo->mem->access_virt_sarray_xp)
       ((j_common_ptr) cinfo, diff->whole_image[ci],
        cinfo->input_iMCU_row * compptr->v_samp_factor,
        (JDIMENSION) compptr->v_samp_factor, TRUE);
@@ -285,20 +290,21 @@ consume_data (j_decompress_ptr cinfo)
  */
 
 METHODDEF(int)
-output_data (j_decompress_ptr cinfo, JSAMPIMAGE output_buf)
+output_data (j_decompress_ptr cinfo, JSAMPIMAGEXP output_buf)
 {
-  j_lossless_d_ptr losslsd = (j_lossless_d_ptr) cinfo->codec;
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
+  j_lossless_d_ptr_xp losslsd = (j_lossless_d_ptr_xp) xinfo->codec_xp;
   d_diff_ptr diff = (d_diff_ptr) losslsd->diff_private;
   JDIMENSION last_iMCU_row = cinfo->total_iMCU_rows - 1;
   int ci, samp_rows, row;
-  JSAMPARRAY buffer;
+  JSAMPARRAYXP buffer;
   jpeg_component_info *compptr;
 
   /* Force some input to be done if we are getting ahead of the input. */
   while (cinfo->input_scan_number < cinfo->output_scan_number ||
 	 (cinfo->input_scan_number == cinfo->output_scan_number &&
 	  cinfo->input_iMCU_row <= cinfo->output_iMCU_row)) {
-    if ((*cinfo->inputctl->consume_input)(cinfo) == JPEG_SUSPENDED)
+    if ((*xinfo->inputctl_xp->consume_input_xp)(cinfo) == JPEG_SUSPENDED)
       return JPEG_SUSPENDED;
   }
 
@@ -306,7 +312,7 @@ output_data (j_decompress_ptr cinfo, JSAMPIMAGE output_buf)
   for (ci = 0, compptr = cinfo->comp_info; ci < cinfo->num_components;
        ci++, compptr++) {
     /* Align the virtual buffer for this component. */
-    buffer = (*cinfo->mem->access_virt_sarray)
+    buffer = (*cinfo->mem->access_virt_sarray_xp)
       ((j_common_ptr) cinfo, diff->whole_image[ci],
        cinfo->output_iMCU_row * compptr->v_samp_factor,
        (JDIMENSION) compptr->v_samp_factor, FALSE);
@@ -315,13 +321,13 @@ output_data (j_decompress_ptr cinfo, JSAMPIMAGE output_buf)
       samp_rows = compptr->v_samp_factor;
     else {
       /* NB: can't use last_row_height here; it is input-side-dependent! */
-      samp_rows = (int) (compptr->height_in_data_units % compptr->v_samp_factor);
+      samp_rows = (int) (compptr->height_in_blocks % compptr->v_samp_factor);
       if (samp_rows == 0) samp_rows = compptr->v_samp_factor;
     }
 
     for (row = 0; row < samp_rows; row++) {
       MEMCOPY(output_buf[ci][row], buffer[row],
-	      compptr->width_in_data_units * SIZEOF(JSAMPLE));
+	      compptr->width_in_blocks * SIZEOF(JSAMPLEXP));
     }
   }
 
@@ -340,7 +346,8 @@ output_data (j_decompress_ptr cinfo, JSAMPIMAGE output_buf)
 GLOBAL(void)
 jinit_d_diff_controller (j_decompress_ptr cinfo, boolean need_full_buffer)
 {
-  j_lossless_d_ptr losslsd = (j_lossless_d_ptr) cinfo->codec;
+  j_lossless_d_ptr_xp losslsd =
+    (j_lossless_d_ptr_xp) ((j_decompress_ptr_xp) cinfo->client_data)->codec_xp;
   d_diff_ptr diff;
   int ci;
   jpeg_component_info *compptr;
@@ -357,12 +364,12 @@ jinit_d_diff_controller (j_decompress_ptr cinfo, boolean need_full_buffer)
        ci++, compptr++) {
     diff->diff_buf[ci] = (*cinfo->mem->alloc_darray)
       ((j_common_ptr) cinfo, JPOOL_IMAGE,
-       (JDIMENSION) jround_up((long) compptr->width_in_data_units,
+       (JDIMENSION) jround_up((long) compptr->width_in_blocks,
 			      (long) compptr->h_samp_factor),
        (JDIMENSION) compptr->v_samp_factor);
     diff->undiff_buf[ci] = (*cinfo->mem->alloc_darray)
       ((j_common_ptr) cinfo, JPOOL_IMAGE,
-       (JDIMENSION) jround_up((long) compptr->width_in_data_units,
+       (JDIMENSION) jround_up((long) compptr->width_in_blocks,
 			      (long) compptr->h_samp_factor),
        (JDIMENSION) compptr->v_samp_factor);
   }
@@ -377,9 +384,9 @@ jinit_d_diff_controller (j_decompress_ptr cinfo, boolean need_full_buffer)
       access_rows = compptr->v_samp_factor;
       diff->whole_image[ci] = (*cinfo->mem->request_virt_sarray)
 	((j_common_ptr) cinfo, JPOOL_IMAGE, FALSE,
-	 (JDIMENSION) jround_up((long) compptr->width_in_data_units,
+	 (JDIMENSION) jround_up((long) compptr->width_in_blocks,
 				(long) compptr->h_samp_factor),
-	 (JDIMENSION) jround_up((long) compptr->height_in_data_units,
+	 (JDIMENSION) jround_up((long) compptr->height_in_blocks,
 				(long) compptr->v_samp_factor),
 	 (JDIMENSION) access_rows);
     }

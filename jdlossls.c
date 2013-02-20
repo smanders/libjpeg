@@ -10,7 +10,7 @@
 
 #define JPEG_INTERNALS
 #include "jinclude.h"
-#include "jpeglib.h"
+#include "xjpeglib.h"
 #include "jlossls.h"
 
 
@@ -26,8 +26,8 @@ calc_output_dimensions (j_decompress_ptr cinfo)
   /* Hardwire it to "no scaling" */
   cinfo->output_width = cinfo->image_width;
   cinfo->output_height = cinfo->image_height;
-  /* jdinput.c has already initialized codec_data_unit to 1,
-   * and has computed unscaled downsampled_width and downsampled_height.
+  /* xjdinput.c has already initialized codec_data_unit (aka DCT_scaled_size)
+   * to 1, and has computed unscaled downsampled_width and downsampled_height.
    */
 }
 
@@ -39,7 +39,8 @@ calc_output_dimensions (j_decompress_ptr cinfo)
 METHODDEF(void)
 start_input_pass (j_decompress_ptr cinfo)
 {
-  j_lossless_d_ptr losslsd = (j_lossless_d_ptr) cinfo->codec;
+  j_lossless_d_ptr_xp losslsd =
+    (j_lossless_d_ptr_xp) ((j_decompress_ptr_xp) cinfo->client_data)->codec_xp;
 
   (*losslsd->entropy_start_pass) (cinfo);
   (*losslsd->predict_start_pass) (cinfo);
@@ -54,16 +55,17 @@ start_input_pass (j_decompress_ptr cinfo)
  */
 
 GLOBAL(void) 
-jinit_lossless_d_codec(j_decompress_ptr cinfo)
+jinit_lossless_d_codec_xp(j_decompress_ptr cinfo)
 {
-  j_lossless_d_ptr losslsd;
+  j_decompress_ptr_xp xinfo = (j_decompress_ptr_xp) cinfo->client_data;
+  j_lossless_d_ptr_xp losslsd;
   boolean use_c_buffer;
 
   /* Create subobject in permanent pool */
-  losslsd = (j_lossless_d_ptr)
+  losslsd = (j_lossless_d_ptr_xp)
     (*cinfo->mem->alloc_small) ((j_common_ptr) cinfo, JPOOL_PERMANENT,
-				SIZEOF(jpeg_lossless_d_codec));
-  cinfo->codec = (struct jpeg_d_codec *) losslsd;
+				SIZEOF(jpeg_lossless_d_codec_xp));
+  xinfo->codec_xp = (struct jpeg_d_codec_xp *) losslsd;
 
   /* Initialize sub-modules */
   /* Entropy decoding: either Huffman or arithmetic coding. */
@@ -79,7 +81,7 @@ jinit_lossless_d_codec(j_decompress_ptr cinfo)
   /* Scaler */
   jinit_d_scaler(cinfo);
 
-  use_c_buffer = cinfo->inputctl->has_multiple_scans || cinfo->buffered_image;
+  use_c_buffer = xinfo->inputctl_xp->has_multiple_scans || cinfo->buffered_image;
   jinit_d_diff_controller(cinfo, use_c_buffer);
 
   /* Initialize method pointers.

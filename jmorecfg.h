@@ -24,6 +24,7 @@
 
 #define BITS_IN_JSAMPLE     8
 #define BITS_IN_JSAMPLE12  12
+#define BITS_IN_JSAMPLE16  16
 
 /*
  * Maximum number of components (color channels) allowed in JPEG image.
@@ -84,6 +85,13 @@ typedef unsigned short JSAMPLEXP;
  */
 
 typedef short JCOEF;
+
+
+/* Representation of a spatial difference value.
+ * This should be a signed value of at least 16 bits; int is usually OK.
+ */
+
+typedef int JDIFF;
 
 
 /* Compressed datastreams are represented as arrays of JOCTET.
@@ -257,14 +265,16 @@ typedef int boolean;
 #undef  C_ARITH_CODING_SUPPORTED    /* Arithmetic coding back end? */
 #define C_MULTISCAN_FILES_SUPPORTED /* Multiple-scan JPEG files? */
 #define C_PROGRESSIVE_SUPPORTED	    /* Progressive JPEG? (Requires MULTISCAN)*/
+#undef C_LOSSLESS_SUPPORTED	        /* Lossless JPEG? */
 #define ENTROPY_OPT_SUPPORTED	    /* Optimization of entropy coding parms? */
 /* Note: if you selected 12-bit data precision, it is dangerous to turn off
  * ENTROPY_OPT_SUPPORTED.  The standard Huffman tables are only good for 8-bit
  * precision, so jchuff.c normally uses entropy optimization to compute
  * usable tables for higher precision.  If you don't want to do optimization,
  * you'll have to supply different default Huffman tables.
- * The exact same statements apply for progressive JPEG: the default tables
- * don't work for progressive mode.  (This may get fixed, however.)
+ * The exact same statements apply for progressive and lossless JPEG:
+ * the default tables don't work for progressive mode or lossless mode.
+ * (This may get fixed, however.)
  */
 #define INPUT_SMOOTHING_SUPPORTED   /* Input image smoothing option? */
 
@@ -273,6 +283,7 @@ typedef int boolean;
 #undef  D_ARITH_CODING_SUPPORTED    /* Arithmetic coding back end? */
 #define D_MULTISCAN_FILES_SUPPORTED /* Multiple-scan JPEG files? */
 #define D_PROGRESSIVE_SUPPORTED	    /* Progressive JPEG? (Requires MULTISCAN)*/
+#define D_LOSSLESS_SUPPORTED	    /* Lossless JPEG? */
 #define SAVE_MARKERS_SUPPORTED	    /* jpeg_save_markers() needed? */
 #define BLOCK_SMOOTHING_SUPPORTED   /* Block smoothing? (Progressive only) */
 #define IDCT_SCALING_SUPPORTED	    /* Output rescaling via IDCT? */

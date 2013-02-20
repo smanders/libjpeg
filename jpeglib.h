@@ -56,6 +56,7 @@
 #ifndef D_MAX_BLOCKS_IN_MCU
 #define D_MAX_BLOCKS_IN_MCU   10 /* decompressor's limit on blocks per MCU */
 #endif
+/* renamed to C_MAX_DATA_UNITS_IN_MCU, D_MAX_DATA_UNITS_IN_MCU in lossless */
 
 
 /* Data structures for images (arrays of samples and of DCT coefficients).
@@ -77,6 +78,10 @@ typedef JBLOCKROW *JBLOCKARRAY;		/* a 2-D array of coefficient blocks */
 typedef JBLOCKARRAY *JBLOCKIMAGE;	/* a 3-D array of coefficient blocks */
 
 typedef JCOEF FAR *JCOEFPTR;	/* useful in a couple of places */
+
+typedef JDIFF FAR *JDIFFROW;	/* pointer to one row of difference values */
+typedef JDIFFROW *JDIFFARRAY;	/* ptr to some rows (a 2-D diff array) */
+typedef JDIFFARRAY *JDIFFIMAGE;	/* a 3-D diff array: top index is color */
 
 
 /* Types for JPEG compression parameters and working tables. */
@@ -140,15 +145,15 @@ typedef struct {
    * Any dummy blocks added to complete an MCU are not counted; therefore
    * these values do not depend on whether a scan is interleaved or not.
    */
-  JDIMENSION width_in_blocks;
-  JDIMENSION height_in_blocks;
+  JDIMENSION width_in_blocks;  /* renamed width_in_data_units in lossless */
+  JDIMENSION height_in_blocks; /* renamed height_in_data_units in lossless */
   /* Size of a DCT block in samples.  Always DCTSIZE for compression.
    * For decompression this is the size of the output from one DCT block,
    * reflecting any scaling we choose to apply during the IDCT step.
    * Values of 1,2,4,8 are likely to be supported.  Note that different
    * components may receive different IDCT scalings.
    */
-  int DCT_scaled_size;
+  int DCT_scaled_size; /* renamed codec_data_unit in lossless */
   /* The downsampled dimensions are the component's actual, unpadded number
    * of samples at the main buffer (preprocessing/compression interface), thus
    * downsampled_width = ceil(image_width * Hi/Hmax)
@@ -167,7 +172,7 @@ typedef struct {
   /* The decompressor output side may not use these variables. */
   int MCU_width;		/* number of blocks per MCU, horizontally */
   int MCU_height;		/* number of blocks per MCU, vertically */
-  int MCU_blocks;		/* MCU_width * MCU_height */
+  int MCU_blocks;		/* MCU_width * MCU_height -- MCU_data_units in lossless */
   int MCU_sample_width;		/* MCU width in samples, MCU_width*DCT_scaled_size */
   int last_col_width;		/* # of non-dummy blocks across in last MCU */
   int last_row_height;		/* # of non-dummy blocks down in last MCU */
@@ -188,8 +193,10 @@ typedef struct {
 typedef struct {
   int comps_in_scan;		/* number of components encoded in this scan */
   int component_index[MAX_COMPS_IN_SCAN]; /* their SOF/comp_info[] indexes */
-  int Ss, Se;			/* progressive JPEG spectral selection parms */
-  int Ah, Al;			/* progressive JPEG successive approx. parms */
+  int Ss, Se;			/* progressive JPEG spectral selection parms
+				   lossless JPEG predictor select parm (Ss) */
+  int Ah, Al;			/* progressive JPEG successive approx. parms
+				   lossless JPEG point transform parm (Al) */
 } jpeg_scan_info;
 
 /* The decompressor can save APPn and COM markers in a list of these: */
@@ -580,6 +587,7 @@ struct jpeg_decompress_struct {
   int max_v_samp_factor;	/* largest v_samp_factor */
 
   int min_DCT_scaled_size;	/* smallest DCT_scaled_size of any component */
+                            /* renamed min_codec_data_unit in lossless */
 
   JDIMENSION total_iMCU_rows;	/* # of iMCU rows in image */
   /* The coefficient controller's input and output progress is measured in
@@ -604,12 +612,12 @@ struct jpeg_decompress_struct {
   JDIMENSION MCUs_per_row;	/* # of MCUs across the image */
   JDIMENSION MCU_rows_in_scan;	/* # of MCU rows in the image */
 
-  int blocks_in_MCU;		/* # of DCT blocks per MCU */
+  int blocks_in_MCU; /* # of DCT blocks per MCU (data_units_in_MCU in lossless) */
   int MCU_membership[D_MAX_BLOCKS_IN_MCU];
   /* MCU_membership[i] is index in cur_comp_info of component owning */
   /* i'th block in an MCU */
 
-  int Ss, Se, Ah, Al;		/* progressive JPEG parameters for scan */
+  int Ss, Se, Ah, Al;		/* progressive/lossless JPEG parms for scan */
 
   /* This field is shared between entropy decoder and marker parser.
    * It is either zero or the code of a JPEG marker that has been
@@ -757,6 +765,14 @@ typedef struct jvirt_sarray_control * jvirt_sarray_ptr;
 typedef struct jvirt_barray_control * jvirt_barray_ptr;
 
 
+#ifdef C_LOSSLESS_SUPPORTED
+#define NEED_DARRAY
+#else
+#ifdef D_LOSSLESS_SUPPORTED
+#define NEED_DARRAY
+#endif
+#endif
+
 struct jpeg_memory_mgr {
   /* Method pointers */
   JMETHOD(void *, alloc_small, (j_common_ptr cinfo, int pool_id,
@@ -772,6 +788,11 @@ struct jpeg_memory_mgr {
   JMETHOD(JBLOCKARRAY, alloc_barray, (j_common_ptr cinfo, int pool_id,
 				      JDIMENSION blocksperrow,
 				      JDIMENSION numrows));
+#ifdef NEED_DARRAY
+  JMETHOD(JDIFFARRAY, alloc_darray, (j_common_ptr cinfo, int pool_id,
+				     JDIMENSION diffsperrow,
+				     JDIMENSION numrows));
+#endif
   JMETHOD(jvirt_sarray_ptr, request_virt_sarray, (j_common_ptr cinfo,
 						  int pool_id,
 						  boolean pre_zero,
